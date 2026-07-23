@@ -23,7 +23,14 @@ services:
       - traefik.enable=true
       - traefik.http.routers.{{.Name}}.rule=Host(`{{.Domain}}`)
       - traefik.http.routers.{{.Name}}.tls.certresolver=le
+      - traefik.http.routers.{{.Name}}.middlewares={{.Name}}-retry
       - traefik.http.services.{{.Name}}.loadbalancer.server.port={{.Port}}
+      # During a rolling swap the old replica stops accepting connections a
+      # moment before Traefik drops it from rotation, which would otherwise
+      # surface as a stray 502. Retry transparently re-routes such a request
+      # to a healthy replica (the new one is already up during the overlap).
+      - traefik.http.middlewares.{{.Name}}-retry.retry.attempts=3
+      - traefik.http.middlewares.{{.Name}}-retry.retry.initialinterval=100ms
     networks: [platform]
 
 networks:
