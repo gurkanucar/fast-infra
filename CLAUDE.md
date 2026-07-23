@@ -21,7 +21,7 @@ A minimal self-hosted deploy platform for a single ~4GB VPS. Containerized apps 
 - **Rolling deploy algorithm** (cli/deploy.go): render → pull → then a **sequential** loop: add one new replica (`--scale +1 --no-recreate`) → poll its Docker healthcheck (120s cap) → SIGTERM one old replica with 30s drain → repeat until `replicas` new are up and the old set is gone → settle scale → record history. Peak container count is replicas+1, not 2×replicas (matters on a 4GB VPS). Traefik's Docker discovery shifts traffic; a **retry middleware** on the app router (rendered by the template) absorbs the brief window where a draining replica has stopped accepting connections but Traefik hasn't dropped it yet — without it a live test dropped ~1 in 50 requests with a 502. Failure semantics: for a single replica a failed deploy changes nothing (the one new container is removed, the old keeps serving). For multi-replica, sequential rolling trades strict atomicity for low peak memory — a mid-rollout health failure removes only the failed replica and aborts, leaving the already-swapped (healthy) new replicas plus the remaining old ones all serving; re-deploy or rollback reconverges.
 - **CI pushes every image twice**: `:latest` and `:<commit-sha>`. Rollback depends on SHA tags staying in the registry.
 - **OpenObserve over Grafana+Loki+Tempo** (single ~300-500MB binary vs 1.5GB+ stack). **Adminer over pgAdmin** (~25MB vs ~150MB). **Dozzle** for live log tail instead of writing a log viewer. **RabbitMQ behind a compose profile**, off by default.
-- One Postgres instance, one database per app. One Redis, key-prefix-per-app (never db indexes — they don't survive a move to Redis Cluster).
+- One Postgres instance, one database per app. One Redis, key-prefix-per-app (never db indexes — they don't survive a move to Redis Cluster). `platform new` can **optionally** (opt-in, default no) provision a least-privilege Postgres role that owns only its own database and a Redis ACL user scoped to `<app>:*` (cli/provision.go). It only ever creates, never drops — consistent with "the platform never touches data". Redis loads an `--aclfile` (infra/docker-compose.yml) so those users survive a restart.
 
 ## App contract
 
@@ -44,6 +44,7 @@ apps/                       per-app dirs on the VPS (gitignored): app.yaml, .env
 - v1 (current): everything above.
 - v2 (**done**): `platform env` list/set/unset (cli/env.go); sequential rolling for multi-replica apps (cli/deploy.go); richer status — version age + deploy counts (cli/status.go).
 - v2.1 (release readiness): CI + stdlib unit tests, prebuilt release binaries so the VPS needs no Go, `platform remove` (cli/remove.go), Spring Boot + static-site examples, publish prep. Never touches data — `remove` leaves the Postgres DB and pushed images intact.
+- Optional provisioning: `platform new` opt-in Postgres role + scoped Redis ACL user (cli/provision.go; redis `--aclfile`). Create-only. Design doc: docs/design/2026-07-23-platform-new-provisioning.md.
 - v3 (only with real users): REST API + web UI reusing the same Go internals; app.yaml schema growth.
 
 Do not build v3 features during v1/v2. When in doubt, ship less.
