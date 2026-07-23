@@ -54,8 +54,10 @@ $$(".modal").forEach((m) => m.addEventListener("click", (e) => { if (e.target ==
 $$(".theme-toggle").forEach((b) => (b.onclick = toggleTheme));
 
 /* ---- services ---- */
+let baseDomain = "";
 async function loadServices() {
   const r = await api("GET", "/api/services");
+  baseDomain = (r.data && r.data.baseDomain) || baseDomain;
   const box = $("#services");
   box.innerHTML = "";
   const svcs = ((r.data && r.data.services) || []).filter((s) => s.running);
@@ -90,9 +92,10 @@ function toggleTheme() {
 
 /* ---- app list ---- */
 async function loadApps() {
-  const r = await api("GET", "/api/apps");
-  if (!r.ok) { toast("Failed to load apps", true); return; }
   const grid = $("#apps");
+  if (!grid.children.length) grid.innerHTML = '<div class="loading"><span class="spinner"></span> Loading apps…</div>';
+  const r = await api("GET", "/api/apps");
+  if (!r.ok) { grid.innerHTML = '<div class="app-card"><span class="muted">Failed to load apps.</span></div>'; return; }
   grid.innerHTML = "";
   const apps = r.data || [];
   $("#empty").classList.toggle("hidden", apps.length > 0);
@@ -110,8 +113,12 @@ function appCard(a) {
 
 /* ---- detail page ---- */
 async function openDetail(name) {
+  $("#detail-name").textContent = name;
+  $("#detail-body").innerHTML = '<div class="loading"><span class="spinner"></span> Loading…</div>';
+  show("detail");
+  window.scrollTo(0, 0);
   const r = await api("GET", "/api/apps/" + encodeURIComponent(name));
-  if (!r.ok) { toast("Not found", true); return; }
+  if (!r.ok) { $("#detail-body").innerHTML = '<p class="muted" style="padding:1rem 0">Couldn’t load this app.</p>'; return; }
   const { app, history, db, redis } = r.data;
   $("#detail-name").textContent = app.name;
   const hist = (history || []).slice().reverse().slice(0, 12)
@@ -125,6 +132,7 @@ async function openDetail(name) {
       <div>
         <div class="sub"><span class="badge ${app.state}">${app.state}</span> ${esc(app.image)}:${esc(app.tag)}</div>
         <a class="dom-link" href="https://${esc(app.domain)}" target="_blank" rel="noopener">${esc(app.domain)} ↗</a>
+        ${baseDomain ? `<a class="logs-link" href="https://tail.${esc(baseDomain)}/" target="_blank" rel="noopener" title="Open Dozzle to view this app's container logs">logs ↗</a>` : ""}
       </div>
       <div class="stat-row">
         <div class="stat"><b>${app.healthy}/${app.replicas}</b><span>healthy</span></div>
@@ -137,6 +145,7 @@ async function openDetail(name) {
           <h4>Deploy</h4>
           <div class="inline"><input id="deploy-tag" placeholder="tag (default latest)"><button class="primary" id="do-deploy">Deploy</button><button id="do-rollback">Rollback</button></div>
           <div class="inline" style="margin-top:.55rem"><button id="do-start">Start</button><button id="do-stop">Stop</button><span class="muted small">start = redeploy current tag · stop = down (keeps files)</span></div>
+          <pre id="op-log" class="op-log hidden"></pre>
         </div>
         <div class="card sect">
           <h4>Scale</h4>
@@ -168,9 +177,9 @@ async function openDetail(name) {
       </div>
     </div>`;
 
-  $("#do-deploy").onclick = () => act(name, "deploy", { tag: $("#deploy-tag").value.trim() }, "#do-deploy", "Deploying…");
-  $("#do-rollback").onclick = () => act(name, "rollback", {}, "#do-rollback", "Rolling back…");
-  $("#do-start").onclick = () => act(name, "start", {}, "#do-start", "Starting…");
+  $("#do-deploy").onclick = () => actStream(name, "deploy", { tag: $("#deploy-tag").value.trim() }, "#do-deploy", "Deploying…");
+  $("#do-rollback").onclick = () => actStream(name, "rollback", {}, "#do-rollback", "Rolling back…");
+  $("#do-start").onclick = () => actStream(name, "start", {}, "#do-start", "Starting…");
   $("#do-stop").onclick = () => act(name, "stop", {}, "#do-stop", "Stopping…");
   $("#do-scale").onclick = () => act(name, "scale", { replicas: +$("#scale-n").value }, "#do-scale", "Scaling…");
   $("#prov-db").onclick = () => provision(name, { db: true }, "#prov-db");
@@ -179,8 +188,6 @@ async function openDetail(name) {
   $("#env-add").onclick = () => addEnvRow("", "");
   $("#env-save").onclick = () => saveEnv(name);
   loadEnv(name);
-  show("detail");
-  window.scrollTo(0, 0);
 }
 
 async function act(name, action, body, btnSel, busy) {
@@ -190,6 +197,32 @@ async function act(name, action, body, btnSel, busy) {
   btn.disabled = false; btn.textContent = orig;
   if (r.ok) { toast(`${action} succeeded`); openDetail(name); }
   else { toast((r.data && r.data.error) || `${action} failed`, true); }
+}
+
+// actStream streams a long operation's output (deploy/rollback/start) live into
+// the op-log box instead of leaving the request pending with no feedback.
+async function actStream(name, action, body, btnSel, busy) {
+  const btn = $(btnSel), orig = btn.textContent;
+  btn.disabled = true; btn.textContent = busy;
+  const log = $("#op-log");
+  if (log) { log.textContent = ""; log.classList.remove("hidden"); }
+  let ok = false;
+  try {
+    const res = await fetch(`/api/apps/${encodeURIComponent(name)}/${action}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}), credentials: "same-origin",
+    });
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (log) { log.textContent += dec.decode(value, { stream: true }); log.scrollTop = log.scrollHeight; }
+    }
+    ok = !!log && log.textContent.includes("✔ done");
+  } catch { /* network error — reported below */ }
+  btn.disabled = false; btn.textContent = orig;
+  toast(ok ? `${action} succeeded` : `${action} failed — see the log`, !ok);
+  loadApps();
 }
 
 async function provision(name, body, btnSel) {
