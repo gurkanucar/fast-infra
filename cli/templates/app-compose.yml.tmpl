@@ -8,6 +8,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # app.yaml's `port` is authoritative: the app must listen here. Most
+      # 12-factor apps read $PORT; if yours uses a different variable
+      # (e.g. Spring's SERVER_PORT), set that in .env to the same value.
+      - PORT={{.Port}}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:{{.Port}}{{.Health}} || curl -fs http://localhost:{{.Port}}{{.Health}} || exit 1"]
       interval: 5s

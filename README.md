@@ -59,7 +59,14 @@ replicas: 1                    # default 1
 manual: false                  # true = you own docker-compose.yml
 ```
 
-Your app must expose a health endpoint and handle SIGTERM gracefully (finish in-flight requests, then exit) — that is the entire contract for zero-downtime deploys. See `examples/go-hello` for a complete reference app.
+Your app must, for zero-downtime deploys:
+
+- **Listen on `port`.** The platform passes it as the `PORT` env var; if your framework reads a different variable (e.g. Spring's `SERVER_PORT`), set that in `.env` to the same value. The health check and Traefik both target `port`, so the app *must* actually listen there.
+- **Expose the health endpoint** at `health` and return 2xx when ready.
+- **Ship `wget` or `curl` in the image** — the generated health check shells out to one of them. Minimal `scratch`/distroless images have neither; add one (as `examples/go-hello`'s Dockerfile does with `apk add wget`), or take over the compose file with `manual: true` and define your own `HEALTHCHECK`.
+- **Handle SIGTERM gracefully** — finish in-flight requests, then exit within 30s.
+
+See `examples/go-hello` for a complete reference app. If you set `manual: true`, your compose file must still define a `healthcheck` — the rolling deploy waits on Docker's health status and will otherwise time out.
 
 ## How zero-downtime works
 
@@ -79,6 +86,14 @@ Rollbacks work because CI pushes every image twice: as `latest` and as the commi
 ## CI/CD
 
 Fork this repo and copy `workflows/deploy-template.yml` to `.github/workflows/deploy-template.yml` in your fork. On the VPS, create a deploy SSH key; in each app repo add secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`. Then each app repo needs only the ~10-line caller workflow (see `examples/go-hello/.github/workflows/deploy.yml`): push to `main` → build → push to GHCR → `platform deploy <app> <sha>` over SSH. The `workflow_dispatch` input lets you deploy any historical commit SHA from the Actions tab.
+
+**GHCR is private by default, so the VPS must be able to pull it.** `platform deploy` runs `docker compose pull`, which fails with `denied`/`unauthorized` on a private package. Either make the package public (repo → Packages → package → *Package settings* → *Change visibility* → Public), or log the VPS in once with a personal access token that has `read:packages`:
+
+```bash
+echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_USER --password-stdin
+```
+
+The login persists in `~/.docker/config.json`, so every later `platform deploy` can pull. A read-only token is enough — the VPS never pushes.
 
 ## Observability
 
