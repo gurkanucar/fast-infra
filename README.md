@@ -23,7 +23,7 @@ No Kubernetes, no daemon, no web UI. A ~4GB VPS comfortably runs the platform pl
 | OpenObserve | Logs + traces + metrics in one binary, OTLP-native, 14-day retention (`logs.<domain>`) |
 | Dozzle | Live `docker logs -f` in the browser (`tail.<domain>`, basic-auth) |
 | RabbitMQ | Optional, off by default (`--profile rabbitmq`) |
-| `platform` CLI | Single static Go binary: new / deploy / rollback / scale / status |
+| `platform` CLI | Single static Go binary: new / deploy / rollback / scale / status / env / remove |
 
 ## Install (on the VPS)
 
@@ -89,6 +89,15 @@ platform env blog set STRIPE_KEY=sk_live_... # add or update one or more keys
 platform env blog unset STRIPE_KEY           # remove keys
 platform deploy blog                          # apply — .env is read when containers start
 ```
+
+Retire an app:
+
+```bash
+platform remove blog               # confirm, stop containers, delete apps/blog
+platform remove blog --keep-files  # just stop it; keep the files to redeploy later
+```
+
+`remove` never touches data: the app's Postgres database and any images pushed to GHCR are left intact, and it prints the `dropdb` command in case you do want the database gone.
 
 Rollbacks work because CI pushes every image twice: as `latest` and as the commit SHA. Keep SHA tags in your registry.
 

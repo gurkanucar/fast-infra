@@ -32,7 +32,7 @@ Apps must: (1) listen on `port` — the compose template injects it as the `PORT
 ```
 install.sh                  one-shot VPS bootstrap (generates all passwords)
 infra/docker-compose.yml    shared services, network name: platform
-cli/                        the `platform` binary (new/deploy/rollback/scale/status)
+cli/                        the `platform` binary (new/deploy/rollback/scale/status/env/remove)
 cli/templates/              compose template embedded via go:embed
 workflows/deploy-template.yml   reusable GH Actions workflow (copy into fork's .github/workflows/)
 examples/go-hello/          reference app + 10-line caller workflow
@@ -43,6 +43,7 @@ apps/                       per-app dirs on the VPS (gitignored): app.yaml, .env
 
 - v1 (current): everything above.
 - v2 (**done**): `platform env` list/set/unset (cli/env.go); sequential rolling for multi-replica apps (cli/deploy.go); richer status — version age + deploy counts (cli/status.go).
+- v2.1 (release readiness): CI + stdlib unit tests, prebuilt release binaries so the VPS needs no Go, `platform remove` (cli/remove.go), Spring Boot + static-site examples, publish prep. Never touches data — `remove` leaves the Postgres DB and pushed images intact.
 - v3 (only with real users): REST API + web UI reusing the same Go internals; app.yaml schema growth.
 
 Do not build v3 features during v1/v2. When in doubt, ship less.
