@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func cmdStatus(args []string) error {
@@ -54,15 +55,35 @@ func statusOne(name string) error {
 	}
 	tag := currentTag(dir)
 	running, healthy := replicaState(dir, tag)
-	fmt.Printf("%s\n  image:    %s:%s\n  domain:   https://%s\n  replicas: %d healthy / %d running (want %d)\n\n",
+	fmt.Printf("%s\n  image:    %s:%s\n  domain:   https://%s\n  replicas: %d healthy / %d running (want %d)\n",
 		app.Name, app.Image, tag, app.Domain, healthy, running, app.Replicas)
 
 	hist, _ := readHistory(dir)
 	if len(hist) == 0 {
-		fmt.Println("  no deployments yet")
+		fmt.Println("\n  no deployments yet")
 		return nil
 	}
-	fmt.Println("  deployments (newest first):")
+
+	// Age of the current version + lifetime deploy counts.
+	var ok, failed int
+	var deployedAt time.Time
+	for _, d := range hist {
+		if d.Status == "success" {
+			ok++
+			if d.Tag == tag {
+				deployedAt = d.Time // forward loop keeps the latest success of this tag
+			}
+		} else {
+			failed++
+		}
+	}
+	if !deployedAt.IsZero() {
+		fmt.Printf("  running:  %s since %s (%s)\n", tag, deployedAt.Local().Format("2006-01-02 15:04"), humanAgo(deployedAt))
+	}
+	fmt.Printf("  deploys:  %d successful, %d failed\n", ok, failed)
+
+	fmt.Println("\n  deployments (newest first):")
+	curMarked := false
 	for i := len(hist) - 1; i >= 0 && i >= len(hist)-10; i-- {
 		d := hist[i]
 		mark := "✓"
@@ -70,12 +91,28 @@ func statusOne(name string) error {
 			mark = "✗"
 		}
 		cur := ""
-		if d.Tag == tag && d.Status == "success" {
+		if !curMarked && d.Tag == tag && d.Status == "success" {
 			cur = "  <- current"
+			curMarked = true // only the most recent success of the current tag is live
 		}
-		fmt.Printf("  %s %-14s %s%s\n", mark, d.Tag, d.Time.Format("2006-01-02 15:04"), cur)
+		fmt.Printf("  %s %-14s %s%s\n", mark, d.Tag, d.Time.Local().Format("2006-01-02 15:04"), cur)
 	}
 	return nil
+}
+
+// humanAgo renders how long ago t was, coarsely (just now / m / h / d).
+func humanAgo(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
 }
 
 func replicaState(dir, tag string) (running, healthy int) {
