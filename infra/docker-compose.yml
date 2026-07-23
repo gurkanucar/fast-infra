@@ -153,6 +153,8 @@ services:
       - ..:/repo
       # Lets the panel install the deploy key's public half for GitHub Actions.
       - /root/.ssh:/root/.ssh
+      # Host's registry login, so the panel can pull private GHCR images.
+      - /root/.docker:/root/.docker:ro
       # Share the host's registry login (docker login ghcr.io) so the panel can
       # pull private images. Empty if you never logged in — public pulls still work.
       - ${HOME}/.docker:/root/.docker:ro
