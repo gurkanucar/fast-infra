@@ -1,10 +1,25 @@
 #!/usr/bin/env bash
-# fast-infra bootstrap. Run on a fresh VPS as a user in the docker group.
+# fast-infra bootstrap. Run on a fresh VPS as root or a user in the docker group.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
+
+# GitHub repo the release binaries are published from (override for a fork).
+REPO="${FAST_INFRA_REPO:-YOUR_USER/fast-infra}"
 
 command -v docker >/dev/null || { echo "docker not found. Install Docker first: https://docs.docker.com/engine/install/"; exit 1; }
 docker compose version >/dev/null 2>&1 || { echo "docker compose plugin not found."; exit 1; }
+
+# Run a command as root, using sudo only when we are not already root.
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
+}
+
+# Download URL to OUTFILE with curl or wget; returns non-zero if neither works.
+fetch() {
+  if command -v curl >/dev/null; then curl -fsSL "$1" -o "$2"
+  elif command -v wget >/dev/null; then wget -qO "$2" "$1"
+  else return 1; fi
+}
 
 # --- infra/.env -------------------------------------------------------------
 if [ ! -f infra/.env ]; then
@@ -18,7 +33,7 @@ if [ ! -f infra/.env ]; then
   OO_PASSWORD="$(openssl rand -hex 16)Aa1@"
   RABBITMQ_PASSWORD=$(openssl rand -hex 16)
   DOZZLE_PLAIN=$(openssl rand -hex 8)
-  # apr1 htpasswd entry; escape $ as $$ for compose interpolation
+  # apr1 htpasswd entry; escape $ as $$ for compose interpolation.
   DOZZLE_HASH=$(openssl passwd -apr1 "$DOZZLE_PLAIN" | sed 's/\$/\$\$/g')
 
   sed -i "s|^BASE_DOMAIN=.*|BASE_DOMAIN=${BASE_DOMAIN}|" infra/.env
@@ -38,13 +53,36 @@ if [ ! -f infra/.env ]; then
 fi
 
 # --- CLI --------------------------------------------------------------------
-if command -v go >/dev/null; then
-  echo "Building platform CLI..."
-  (cd cli && go build -o /tmp/platform .) && sudo mv /tmp/platform /usr/local/bin/platform
-  echo "Installed: /usr/local/bin/platform"
-else
-  echo "Go not found; skipping CLI build. Install Go and run: cd cli && go build -o /usr/local/bin/platform ."
-fi
+# Prefer a prebuilt release binary (no Go needed); fall back to building.
+install_cli() {
+  local arch bin url
+  bin=/usr/local/bin/platform
+  case "$(uname -m)" in
+    x86_64 | amd64) arch=amd64 ;;
+    aarch64 | arm64) arch=arm64 ;;
+    *) arch="" ;;
+  esac
+
+  if [ -n "$arch" ]; then
+    url="https://github.com/${REPO}/releases/latest/download/platform-linux-${arch}"
+    echo "Downloading platform ($arch) from the latest release..."
+    if fetch "$url" /tmp/platform && [ -s /tmp/platform ]; then
+      chmod +x /tmp/platform && as_root mv /tmp/platform "$bin"
+      echo "Installed: $bin"
+      return 0
+    fi
+    echo "Release download failed; falling back to building from source."
+  fi
+
+  if command -v go >/dev/null; then
+    (cd cli && go build -o /tmp/platform .) && as_root mv /tmp/platform "$bin"
+    echo "Installed (built from source): $bin"
+  else
+    echo "No release binary for this arch and Go is not installed."
+    echo "Install Go and re-run, or build manually: cd cli && go build -o $bin ."
+  fi
+}
+install_cli
 
 # --- up ---------------------------------------------------------------------
 echo "Starting infra..."

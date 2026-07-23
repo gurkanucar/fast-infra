@@ -27,14 +27,14 @@ No Kubernetes, no daemon, no web UI. A ~4GB VPS comfortably runs the platform pl
 
 ## Install (on the VPS)
 
-Requirements: a Linux VPS (~4GB RAM recommended), Docker + compose plugin, Go 1.22+ (only to build the CLI once), a domain you control.
+Requirements: a Linux VPS (~4GB RAM recommended, amd64 or arm64), Docker + compose plugin, and a domain you control. The install script downloads a prebuilt `platform` binary; Go is only needed as a fallback (unusual arch, or building from source).
 
 ```bash
 git clone https://github.com/YOUR_USER/fast-infra ~/fast-infra
 cd ~/fast-infra && ./install.sh
 ```
 
-The script asks for your base domain and email, generates all passwords, builds the `platform` binary, and starts the infra stack. Add DNS A records for `db`, `logs`, `tail` (and later, each app's domain) pointing to the server. Also enable 2GB of swap if your provider image doesn't (`fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile`).
+The script asks for your base domain and email, generates all passwords, installs the `platform` binary (downloading the prebuilt release for your arch, or building it if you have Go), and starts the infra stack. Add DNS A records for `db`, `logs`, `tail` (and later, each app's domain) pointing to the server. Also enable 2GB of swap if your provider image doesn't (`fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile`).
 
 ## Creating and deploying an app
 
