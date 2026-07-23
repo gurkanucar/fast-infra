@@ -12,7 +12,10 @@ if [ ! -f infra/.env ]; then
   read -rp "Base domain (e.g. example.com): " BASE_DOMAIN
   read -rp "Email (Let's Encrypt + OpenObserve login): " ACME_EMAIL
   PG_PASSWORD=$(openssl rand -hex 16)
-  OO_PASSWORD=$(openssl rand -hex 16)
+  # OpenObserve enforces a password policy (>=1 lowercase, uppercase, digit and
+  # special char). A bare hex string has no uppercase/special, so OpenObserve
+  # panics on boot — append one of each class to the random part.
+  OO_PASSWORD="$(openssl rand -hex 16)Aa1@"
   RABBITMQ_PASSWORD=$(openssl rand -hex 16)
   DOZZLE_PLAIN=$(openssl rand -hex 8)
   # apr1 htpasswd entry; escape $ as $$ for compose interpolation

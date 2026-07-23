@@ -2,7 +2,11 @@ name: fast-infra
 
 services:
   traefik:
-    image: traefik:v3.1
+    # Rolling v3 tag on purpose: Docker Engine keeps raising the daemon's
+    # minimum API version, and older Traefik clients (e.g. v3.1) then can't
+    # reach the daemon and discover nothing. Tracking the latest v3 keeps the
+    # provider compatible on a freshly installed VPS with zero maintenance.
+    image: traefik:v3
     restart: unless-stopped
     command:
       - --providers.docker=true
