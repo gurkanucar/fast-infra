@@ -126,7 +126,7 @@ Fewer decisions beat more features. One proxy, one database, one cache, one obse
 
 ## Roadmap
 
-- v2: `platform env` (done), richer history, sequential rolling for multi-replica apps
+- v2: `platform env` (done), sequential rolling for multi-replica apps (done); still: richer history
 - v3 (only if people actually use this): REST API + web UI on top of the same Go internals
 
 ## License
