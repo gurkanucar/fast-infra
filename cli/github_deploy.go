@@ -157,11 +157,17 @@ jobs:
 `, owner, app, branch)
 }
 
-// ghAllowReusable lets the operator's other repos use the private fast-infra
-// fork's reusable workflow (Settings → Actions → Access = "user").
+// ghAllowReusable lets the operator's other repos use the fast-infra fork's
+// reusable workflow. The access policy API only applies to private/internal
+// repos, so a 422 means the fork is public (already accessible) — treat that
+// as success.
 func ghAllowReusable(owner string) error {
-	return ghPut(fmt.Sprintf("/repos/%s/fast-infra/actions/permissions/access", owner),
+	err := ghPut(fmt.Sprintf("/repos/%s/fast-infra/actions/permissions/access", owner),
 		[]byte(`{"access_level":"user"}`))
+	if err != nil && strings.Contains(err.Error(), "422") {
+		return nil
+	}
+	return err
 }
 
 func envOr(k, def string) string {
