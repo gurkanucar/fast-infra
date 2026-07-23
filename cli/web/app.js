@@ -172,15 +172,48 @@ async function ghRenderRepos(user) {
   });
 }
 function ghDeployRepo(rp) {
-  closeModals();
-  const f = $("#new-form");
-  f.elements.name.value = rp.name;
-  f.elements.image.value = `ghcr.io/${rp.owner}/${rp.name}`;
-  f.elements.domain.value = baseDomain ? `${rp.name}.${baseDomain}` : `${rp.name}.example.com`;
-  f.elements.port.value = 8080;
-  f.elements.health.value = "/health";
-  openModal("#new-modal");
-  toast(`Prefilled from ${rp.name} — review and create`);
+  const dom = baseDomain ? `${rp.name}.${baseDomain}` : `${rp.name}.example.com`;
+  $("#gh-body").innerHTML = `<button class="ghost small" id="gh-back">← repos</button>
+    <h3 class="gh-repo-title">${esc(rp.fullName)}</h3>
+    <form id="gh-deploy-form" class="form">
+      <label>Domain<input name="domain" value="${esc(dom)}" required></label>
+      <div class="row"><label>Port<input name="port" type="number" value="8080"></label><label>Health path<input name="health" value="/health"></label></div>
+      <label>Branch to deploy on push<input name="branch" value="${esc(rp.defaultBranch || "main")}"></label>
+      <div class="provision-box">
+        <label class="check"><input type="checkbox" name="provisionDB"> Create a Postgres database + user</label>
+        <label class="check"><input type="checkbox" name="provisionRedis"> Create a scoped Redis user</label>
+      </div>
+      <button type="submit" class="primary">Set up &amp; enable deploys</button>
+      <div class="gh-deploy-status"></div>
+      <p class="muted small">Writes the deploy workflow and secrets to the repo. The repo needs a Dockerfile. Pushing to the branch then builds and deploys.</p>
+    </form>`;
+  $("#gh-back").onclick = () => ghRenderRepos();
+  $("#gh-deploy-form").addEventListener("submit", (e) => ghSubmitDeploy(e, rp));
+}
+async function ghSubmitDeploy(e, rp) {
+  e.preventDefault();
+  const f = e.target, g = (n) => f.elements[n];
+  const st = $(".gh-deploy-status", f);
+  const btn = $("button[type=submit]", f), orig = btn.textContent;
+  btn.disabled = true; btn.textContent = "Setting up…";
+  st.innerHTML = '<div class="loading"><span class="spinner"></span> Creating app, secrets and workflow…</div>';
+  const body = {
+    owner: rp.owner, repo: rp.name,
+    domain: g("domain").value.trim(), port: +g("port").value || 8080, health: g("health").value.trim() || "/health",
+    branch: g("branch").value.trim() || rp.defaultBranch || "main",
+    provisionDB: g("provisionDB").checked, provisionRedis: g("provisionRedis").checked,
+  };
+  const r = await api("POST", "/api/github/deploy", body);
+  btn.disabled = false; btn.textContent = orig;
+  if (!r.ok) { st.innerHTML = `<p class="error">${esc((r.data && r.data.error) || "Failed")}</p>`; return; }
+  const warns = (r.data && r.data.warnings) || [];
+  const branch = (r.data && r.data.branch) || body.branch;
+  const actions = `https://github.com/${rp.fullName}/actions`;
+  st.innerHTML = `<p class="ok-line">✓ App, secrets and workflow are set up.</p>
+    <p class="small">Push to <b>${esc(branch)}</b> (or run the workflow) to build &amp; deploy — watch it in <a href="${esc(actions)}" target="_blank" rel="noopener">Actions ↗</a>.</p>
+    ${warns.length ? `<p class="error small">Warnings: ${esc(warns.join("; "))}</p>` : ""}`;
+  loadApps();
+  toast("GitHub deploy set up");
 }
 
 /* ---- app list ---- */

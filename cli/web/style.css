@@ -239,6 +239,8 @@ main { max-width: 1080px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
 .repo-item { display: flex; align-items: center; gap: .8rem; padding: .65rem .9rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-2); }
 .repo-item .ri-info { flex: 1; min-width: 0; }
 .repo-item .ri-info b { font-family: var(--mono); }
+.gh-repo-title { font-family: var(--mono); margin: .5rem 0 1rem; font-size: 1.05rem; }
+.ok-line { color: var(--up); font-weight: 600; }
 
 /* Settings fields on the detail page */
 .sect .fld { display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: .6rem; }
