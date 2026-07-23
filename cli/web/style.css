@@ -240,6 +240,12 @@ main { max-width: 1080px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
 .repo-item .ri-info { flex: 1; min-width: 0; }
 .repo-item .ri-info b { font-family: var(--mono); }
 
+/* Settings fields on the detail page */
+.sect .fld { display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: .6rem; }
+.sect .fld input { font-weight: 400; }
+.sect .fld-row { display: flex; gap: .6rem; }
+.sect .fld-row .fld { flex: 1; }
+
 /* Service icon + name row */
 .svc-open { gap: .5rem; width: 100%; }
 .svc-icon { width: 18px; height: 18px; flex: none; color: var(--accent); }

@@ -245,6 +245,16 @@ async function openDetail(name) {
           <div class="inline"><input id="scale-n" type="number" min="1" value="${app.replicas}" style="max-width:110px"><button id="do-scale">Scale</button></div>
         </div>
         <div class="card sect">
+          <h4>Settings</h4>
+          <label class="fld">Image<input id="cfg-image" value="${esc(app.image)}"></label>
+          <label class="fld">Domain<input id="cfg-domain" value="${esc(app.domain)}"></label>
+          <div class="fld-row">
+            <label class="fld">Port<input id="cfg-port" type="number" value="${app.port}"></label>
+            <label class="fld">Health path<input id="cfg-health" value="${esc(app.health)}"></label>
+          </div>
+          <div class="inline" style="margin-top:.6rem"><button class="primary" id="cfg-save">Save settings</button><span class="muted small">deploy to apply</span></div>
+        </div>
+        <div class="card sect">
           <h4>Environment</h4>
           <div id="env-list"></div>
           <button id="env-add" class="ghost">+ Add variable</button>
@@ -275,6 +285,7 @@ async function openDetail(name) {
   $("#do-start").onclick = () => actStream(name, "start", {}, "#do-start", "Starting…");
   $("#do-stop").onclick = () => act(name, "stop", {}, "#do-stop", "Stopping…");
   $("#do-scale").onclick = () => act(name, "scale", { replicas: +$("#scale-n").value }, "#do-scale", "Scaling…");
+  $("#cfg-save").onclick = () => saveConfig(name);
   $("#prov-db").onclick = () => provision(name, { db: true }, "#prov-db");
   $("#prov-redis").onclick = () => provision(name, { redis: true }, "#prov-redis");
   $("#do-remove").onclick = () => removeApp(name, $("#keep-files").checked);
@@ -316,6 +327,19 @@ async function actStream(name, action, body, btnSel, busy) {
   btn.disabled = false; btn.textContent = orig;
   toast(ok ? `${action} succeeded` : `${action} failed — see the log`, !ok);
   loadApps();
+}
+
+async function saveConfig(name) {
+  const btn = $("#cfg-save"), orig = btn.textContent;
+  btn.disabled = true; btn.textContent = "Saving…";
+  const body = {
+    image: $("#cfg-image").value.trim(), domain: $("#cfg-domain").value.trim(),
+    port: +$("#cfg-port").value, health: $("#cfg-health").value.trim(),
+  };
+  const r = await api("PUT", `/api/apps/${encodeURIComponent(name)}/config`, body);
+  btn.disabled = false; btn.textContent = orig;
+  if (r.ok) { toast("Settings saved — deploy to apply"); openDetail(name); }
+  else { toast((r.data && r.data.error) || "Save failed", true); }
 }
 
 async function provision(name, body, btnSel) {
