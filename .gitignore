@@ -1,0 +1,9 @@
+# Runtime state on the VPS — never commit
+infra/.env
+infra/backups/
+apps/*/
+!apps/.gitkeep
+
+# Local build artifacts
+cli/platform
+*.exe
