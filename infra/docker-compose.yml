@@ -147,6 +147,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/repo
+      # Share the host's registry login (docker login ghcr.io) so the panel can
+      # pull private images. Empty if you never logged in — public pulls still work.
+      - ${HOME}/.docker:/root/.docker:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.panel.rule=Host(`panel.${BASE_DOMAIN}`)

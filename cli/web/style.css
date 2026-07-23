@@ -173,3 +173,28 @@ main { max-width: 1080px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
   .app-card { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .brand .cur, .login-card h1::after { animation: none; } * { transition: none !important; } }
+
+/* Light theme */
+:root[data-theme="light"] {
+  --bg: #eef1f5; --bg-2: #ffffff; --surface: #ffffff; --surface-2: #f1f4f8;
+  --border: #dde3ea; --border-2: #cfd6df; --text: #1a2230; --muted: #5b6675; --faint: #8a95a6;
+  --accent: #cf8418; --accent-ink: #ffffff; --up: #2fa872; --degraded: #c77f16; --down: #94a0b0; --danger: #d64545;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 26px rgba(16,24,40,.10);
+}
+:root[data-theme="light"] body { background: radial-gradient(1200px 600px at 78% -8%, #ffffff 0%, var(--bg) 55%) fixed; }
+:root[data-theme="light"] .topbar { background: rgba(255,255,255,.85); }
+:root[data-theme="light"] .chip { background: #eef2f6; }
+
+/* Service cards with credentials (overrides the earlier pill style) */
+.svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: .8rem; }
+.svc-card { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; box-shadow: var(--shadow); transition: border-color .12s; }
+.svc-card:hover { transform: none; background: var(--surface); border-color: var(--border-2); }
+.svc-open { display: inline-flex; align-items: center; gap: .3rem; font-weight: 600; text-decoration: none; color: var(--text); font-size: .95rem; }
+.svc-open:hover { color: var(--accent); }
+.svc-open .ext { opacity: .6; font-size: .82rem; }
+.creds { margin-top: .65rem; display: flex; flex-direction: column; gap: .4rem; }
+.cred { display: flex; align-items: center; gap: .5rem; font-size: .82rem; }
+.cred .ck { color: var(--faint); font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .5px; width: 32px; flex: none; }
+.cred code { font-family: var(--mono); color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cred .copy { padding: .2rem .55rem; font-size: .72rem; font-weight: 600; flex: none; }
+.theme-toggle { font-size: 1rem; padding: .5rem .6rem; }

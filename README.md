@@ -141,7 +141,7 @@ Everything above is CLI-first — SSH is all you need. If you'd rather click, th
 docker compose -f infra/docker-compose.yml --profile panel up -d --build panel
 ```
 
-It serves at `https://panel.<domain>` behind Traefik, and you log in with the `PANEL_PASSWORD` printed by `install.sh` (stored in `infra/.env`). It is **off by default** and a deliberate trade-off: the panel mounts the Docker socket (root-equivalent), so it is only as safe as that password — keep it strong, and don't enable it if SSH-only is enough for you. It's a single Go binary (`platform serve`) serving an embedded page; no separate frontend to build.
+It serves at `https://panel.<domain>` behind Traefik, and you log in with the `PANEL_PASSWORD` printed by `install.sh` (stored in `infra/.env`). It also lists the other services with copy-to-clipboard login details, has a light/dark toggle, and can stop/start an app as well as deploy it. It is **off by default** and a deliberate trade-off: the panel mounts the Docker socket (root-equivalent), so it is only as safe as that password — keep it strong, and don't enable it if SSH-only is enough for you. It's a single Go binary (`platform serve`) serving an embedded page; no separate frontend to build.
 
 ## Memory budgeting (4GB VPS)
 

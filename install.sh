@@ -43,6 +43,7 @@ if [ ! -f infra/.env ]; then
   sed -i "s|^OO_PASSWORD=.*|OO_PASSWORD=${OO_PASSWORD}|" infra/.env
   sed -i "s|^RABBITMQ_PASSWORD=.*|RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}|" infra/.env
   sed -i "s|^DOZZLE_AUTH=.*|DOZZLE_AUTH=admin:${DOZZLE_HASH}|" infra/.env
+  sed -i "s|^DOZZLE_PASSWORD=.*|DOZZLE_PASSWORD=${DOZZLE_PLAIN}|" infra/.env
   sed -i "s|^PANEL_PASSWORD=.*|PANEL_PASSWORD=${PANEL_PASSWORD}|" infra/.env
 
   echo
