@@ -185,6 +185,7 @@ function ghDeployRepo(rp) {
   $("#gh-body").innerHTML = `<button class="ghost small" id="gh-back">← repos</button>
     <h3 class="gh-repo-title">${esc(rp.fullName)}</h3>
     <form id="gh-deploy-form" class="form">
+      <label>App name<input name="name" value="${esc(rp.name)}" pattern="[a-z0-9][a-z0-9-]*" required></label>
       <label>Domain<input name="domain" value="${esc(dom)}" required></label>
       <div class="row"><label>Port<input name="port" type="number" value="8080"></label><label>Health path<input name="health" value="/health"></label></div>
       <label>Branch to deploy on push<input name="branch" value="${esc(rp.defaultBranch || "main")}"></label>
@@ -207,7 +208,7 @@ async function ghSubmitDeploy(e, rp) {
   btn.disabled = true; btn.textContent = "Setting up…";
   st.innerHTML = '<div class="loading"><span class="spinner"></span> Creating app, secrets and workflow…</div>';
   const body = {
-    owner: rp.owner, repo: rp.name,
+    owner: rp.owner, repo: rp.name, name: g("name").value.trim() || rp.name,
     domain: g("domain").value.trim(), port: +g("port").value || 8080, health: g("health").value.trim() || "/health",
     branch: g("branch").value.trim() || rp.defaultBranch || "main",
     provisionDB: g("provisionDB").checked, provisionRedis: g("provisionRedis").checked,
@@ -215,14 +216,13 @@ async function ghSubmitDeploy(e, rp) {
   const r = await api("POST", "/api/github/deploy", body);
   btn.disabled = false; btn.textContent = orig;
   if (!r.ok) { st.innerHTML = `<p class="error">${esc((r.data && r.data.error) || "Failed")}</p>`; return; }
-  const warns = (r.data && r.data.warnings) || [];
+  const nm = (r.data && r.data.name) || body.name;
   const branch = (r.data && r.data.branch) || body.branch;
-  const actions = `https://github.com/${rp.fullName}/actions`;
-  st.innerHTML = `<p class="ok-line">✓ App, secrets and workflow are set up.</p>
-    <p class="small">Push to <b>${esc(branch)}</b> (or run the workflow) to build &amp; deploy — watch it in <a href="${esc(actions)}" target="_blank" rel="noopener">Actions ↗</a>.</p>
-    ${warns.length ? `<p class="error small">Warnings: ${esc(warns.join("; "))}</p>` : ""}`;
-  loadApps();
-  toast("GitHub deploy set up");
+  const warns = (r.data && r.data.warnings) || [];
+  if (warns.length) toast(warns.join("; "), true);
+  else toast(r.data && r.data.dispatched ? `${nm}: build started in Actions` : `${nm}: set up — push to ${branch}`);
+  closeModals();
+  openDetail(nm); // go to the app page instead of leaving the modal open
 }
 
 /* ---- app list ---- */

@@ -138,7 +138,7 @@ func putRepoFile(owner, repo, path, content, message, branch string) error {
 // callerWorkflow references the operator's own fast-infra fork
 // (<owner>/fast-infra) so it works for any install, not just the maintainer's.
 func callerWorkflow(owner, app, branch string) string {
-	return fmt.Sprintf(`name: deploy
+	return fmt.Sprintf(`name: deploy-%[2]s
 on:
   push:
     branches: [%[3]s]
@@ -155,6 +155,28 @@ jobs:
       tag: ${{ inputs.tag || '' }}
     secrets: inherit
 `, owner, app, branch)
+}
+
+// ghDispatchWorkflow kicks off the deploy workflow so a build starts right
+// after setup, without the operator having to push.
+func ghDispatchWorkflow(owner, repo, workflowFile, branch string) error {
+	body := []byte(fmt.Sprintf(`{"ref":%q}`, branch))
+	req, err := http.NewRequest("POST", fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/workflows/%s/dispatches", owner, repo, workflowFile), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+ghToken())
+	req.Header.Set("Accept", "application/vnd.github+json")
+	res, err := ghClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		b, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("%s: %s", res.Status, strings.TrimSpace(string(b)))
+	}
+	return nil
 }
 
 // ghAllowReusable lets the operator's other repos use the fast-infra fork's
@@ -187,6 +209,7 @@ func handleGithubDeploy(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Owner          string `json:"owner"`
 		Repo           string `json:"repo"`
+		Name           string `json:"name"`
 		Domain         string `json:"domain"`
 		Health         string `json:"health"`
 		Branch         string `json:"branch"`
@@ -201,10 +224,16 @@ func handleGithubDeploy(w http.ResponseWriter, r *http.Request) {
 	if body.Branch == "" {
 		body.Branch = "main"
 	}
-	// Create the app unless it already exists (re-running should just refresh
-	// the secrets/workflow).
-	if _, err := os.Stat(filepath.Join("apps", body.Repo)); err != nil {
-		if _, err := createApp(&App{Name: body.Repo, Image: "ghcr.io/" + body.Owner + "/" + body.Repo, Domain: body.Domain, Port: body.Port, Health: body.Health}, body.ProvisionDB, body.ProvisionRedis); err != nil {
+	// App name defaults to the repo, but can differ — so the same repo can run
+	// as several apps, each with its own per-app workflow file.
+	name := body.Name
+	if name == "" {
+		name = body.Repo
+	}
+	// Create the app unless it already exists (re-running just refreshes the
+	// secrets/workflow).
+	if _, err := os.Stat(filepath.Join("apps", name)); err != nil {
+		if _, err := createApp(&App{Name: name, Image: "ghcr.io/" + body.Owner + "/" + body.Repo, Domain: body.Domain, Port: body.Port, Health: body.Health}, body.ProvisionDB, body.ProvisionRedis); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "create app: " + err.Error()})
 			return
 		}
@@ -232,8 +261,14 @@ func handleGithubDeploy(w http.ResponseWriter, r *http.Request) {
 	if err := ghAllowReusable(body.Owner); err != nil {
 		warnings = append(warnings, "couldn't auto-allow the fast-infra reusable workflow (make "+body.Owner+"/fast-infra public or set Actions access to \"user\"): "+err.Error())
 	}
-	if err := putRepoFile(body.Owner, body.Repo, ".github/workflows/deploy.yml", callerWorkflow(body.Owner, body.Repo, body.Branch), "Add fast-infra deploy workflow", body.Branch); err != nil {
+	wfFile := "deploy-" + name + ".yml"
+	dispatched := false
+	if err := putRepoFile(body.Owner, body.Repo, ".github/workflows/"+wfFile, callerWorkflow(body.Owner, name, body.Branch), "Add fast-infra deploy workflow for "+name, body.Branch); err != nil {
 		warnings = append(warnings, "workflow: "+err.Error())
+	} else if err := ghDispatchWorkflow(body.Owner, body.Repo, wfFile, body.Branch); err != nil {
+		warnings = append(warnings, "couldn't auto-start the build (push to "+body.Branch+" to build): "+err.Error())
+	} else {
+		dispatched = true
 	}
-	writeJSON(w, 200, map[string]any{"warnings": warnings, "branch": body.Branch})
+	writeJSON(w, 200, map[string]any{"warnings": warnings, "branch": body.Branch, "name": name, "dispatched": dispatched})
 }
