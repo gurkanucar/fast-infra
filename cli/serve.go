@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -60,6 +61,8 @@ func cmdServe(args []string) error {
 	mux.HandleFunc("GET /api/apps/{name}", requireAuth(handleDetail))
 	mux.HandleFunc("DELETE /api/apps/{name}", requireAuth(handleRemove))
 	mux.HandleFunc("POST /api/apps/{name}/deploy", requireAuth(handleDeploy))
+	mux.HandleFunc("POST /api/apps/{name}/stop", requireAuth(handleStop))
+	mux.HandleFunc("POST /api/apps/{name}/start", requireAuth(handleStart))
 	mux.HandleFunc("POST /api/apps/{name}/rollback", requireAuth(handleRollback))
 	mux.HandleFunc("POST /api/apps/{name}/scale", requireAuth(handleScale))
 	mux.HandleFunc("GET /api/apps/{name}/env", requireAuth(handleEnvGet))
@@ -242,20 +245,76 @@ func handleProvision(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"warnings": warnings})
 }
 
+func handleStop(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	dir, err := appDir(name)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if _, err := os.Stat(filepath.Join(dir, "docker-compose.yml")); err == nil {
+		if err := dc(dir, currentTag(dir), "down"); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	writeJSON(w, 200, map[string]bool{"stopped": true})
+}
+
+func handleStart(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	dir, err := appDir(name)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	tag := currentTag(dir)
+	if err := deploy(name, tag); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"started": tag})
+}
+
 type serviceLink struct {
 	Name    string `json:"name"`
 	URL     string `json:"url"`
 	Desc    string `json:"desc"`
 	Running bool   `json:"running"`
+	User    string `json:"user"`
+	Pass    string `json:"pass"`
+}
+
+// infraEnv parses infra/.env (bind-mounted into the panel) into a map so the
+// panel can surface the generated service credentials.
+func infraEnv() map[string]string {
+	m := map[string]string{}
+	f, err := os.Open(filepath.Join("infra", ".env"))
+	if err != nil {
+		return m
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if k, v, ok := strings.Cut(line, "="); ok {
+			m[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+	}
+	return m
 }
 
 func handleServices(w http.ResponseWriter, r *http.Request) {
 	base := os.Getenv("BASE_DOMAIN")
+	e := infraEnv()
 	list := []serviceLink{
-		{"Adminer", "https://db." + base, "Postgres database UI", containerUp("fast-infra-adminer-1")},
-		{"OpenObserve", "https://logs." + base, "Logs, traces & metrics", containerUp("fast-infra-openobserve-1")},
-		{"Dozzle", "https://tail." + base, "Live container logs", containerUp("fast-infra-dozzle-1")},
-		{"RabbitMQ", "https://mq." + base, "Message broker (optional)", containerUp("fast-infra-rabbitmq-1")},
+		{"Adminer", "https://db." + base, "Postgres database UI (server: postgres)", containerUp("fast-infra-adminer-1"), "postgres", e["PG_PASSWORD"]},
+		{"OpenObserve", "https://logs." + base, "Logs, traces & metrics", containerUp("fast-infra-openobserve-1"), e["ACME_EMAIL"], e["OO_PASSWORD"]},
+		{"Dozzle", "https://tail." + base, "Live container logs", containerUp("fast-infra-dozzle-1"), "admin", e["DOZZLE_PASSWORD"]},
+		{"RabbitMQ", "https://mq." + base, "Message broker (optional)", containerUp("fast-infra-rabbitmq-1"), "platform", e["RABBITMQ_PASSWORD"]},
 	}
 	writeJSON(w, 200, map[string]any{"baseDomain": base, "services": list})
 }

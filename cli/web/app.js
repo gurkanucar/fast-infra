@@ -51,6 +51,7 @@ $("#new-btn").onclick = () => openModal("#new-modal");
 $("#back-btn").onclick = toDashboard;
 $$("[data-close]").forEach((b) => (b.onclick = closeModals));
 $$(".modal").forEach((m) => m.addEventListener("click", (e) => { if (e.target === m) closeModals(); }));
+$$(".theme-toggle").forEach((b) => (b.onclick = toggleTheme));
 
 /* ---- services ---- */
 async function loadServices() {
@@ -59,13 +60,32 @@ async function loadServices() {
   box.innerHTML = "";
   const svcs = ((r.data && r.data.services) || []).filter((s) => s.running);
   if (!svcs.length) { box.innerHTML = '<p class="muted">No service UIs detected.</p>'; return; }
-  svcs.forEach((s) => {
-    const a = document.createElement("a");
-    a.className = "svc-card";
-    a.href = s.url; a.target = "_blank"; a.rel = "noopener"; a.title = s.desc;
-    a.innerHTML = `<h3>${esc(s.name)}</h3><span class="ext">↗</span>`;
-    box.appendChild(a);
-  });
+  svcs.forEach((s) => box.appendChild(svcCard(s)));
+}
+function credRow(label, val, mask) {
+  return `<div class="cred"><span class="ck">${label}</span><code>${mask ? "••••••••" : esc(val)}</code><button class="copy" data-val="${esc(val)}" title="Copy ${label}">copy</button></div>`;
+}
+function svcCard(s) {
+  const el = document.createElement("div");
+  el.className = "svc-card";
+  const creds = (s.user || s.pass)
+    ? `<div class="creds">${s.user ? credRow("user", s.user) : ""}${s.pass ? credRow("pass", s.pass, true) : ""}</div>`
+    : "";
+  el.innerHTML = `<a class="svc-open" href="${esc(s.url)}" target="_blank" rel="noopener" title="${esc(s.desc)}">${esc(s.name)} <span class="ext">↗</span></a>${creds}`;
+  el.querySelectorAll(".copy").forEach((b) => (b.onclick = () => copyText(b.dataset.val)));
+  return el;
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast("Copied to clipboard"); }
+  catch { toast("Copy failed — copy it manually", true); }
+}
+
+/* ---- theme ---- */
+function initTheme() { document.documentElement.setAttribute("data-theme", localStorage.getItem("theme") || "dark"); }
+function toggleTheme() {
+  const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("theme", next);
 }
 
 /* ---- app list ---- */
@@ -116,6 +136,7 @@ async function openDetail(name) {
         <div class="card sect">
           <h4>Deploy</h4>
           <div class="inline"><input id="deploy-tag" placeholder="tag (default latest)"><button class="primary" id="do-deploy">Deploy</button><button id="do-rollback">Rollback</button></div>
+          <div class="inline" style="margin-top:.55rem"><button id="do-start">Start</button><button id="do-stop">Stop</button><span class="muted small">start = redeploy current tag · stop = down (keeps files)</span></div>
         </div>
         <div class="card sect">
           <h4>Scale</h4>
@@ -149,6 +170,8 @@ async function openDetail(name) {
 
   $("#do-deploy").onclick = () => act(name, "deploy", { tag: $("#deploy-tag").value.trim() }, "#do-deploy", "Deploying…");
   $("#do-rollback").onclick = () => act(name, "rollback", {}, "#do-rollback", "Rolling back…");
+  $("#do-start").onclick = () => act(name, "start", {}, "#do-start", "Starting…");
+  $("#do-stop").onclick = () => act(name, "stop", {}, "#do-stop", "Stopping…");
   $("#do-scale").onclick = () => act(name, "scale", { replicas: +$("#scale-n").value }, "#do-scale", "Scaling…");
   $("#prov-db").onclick = () => provision(name, { db: true }, "#prov-db");
   $("#prov-redis").onclick = () => provision(name, { redis: true }, "#prov-redis");
@@ -241,4 +264,5 @@ $("#new-form").addEventListener("submit", async (e) => {
   } else { $(".new-error", f).textContent = (r.data && r.data.error) || "Create failed"; }
 });
 
+initTheme();
 init();
