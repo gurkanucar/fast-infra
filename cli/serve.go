@@ -208,7 +208,7 @@ func appInfoFor(name string) (*appInfo, error) {
 		return nil, err
 	}
 	tag := currentTag(dir)
-	running, healthy := replicaState(dir, tag)
+	running, healthy := replicaState(dir, tag, app.Port, app.Health)
 	state := "down"
 	if running > 0 {
 		if state = "up"; healthy < running {

@@ -71,7 +71,7 @@ Your app must, for zero-downtime deploys:
 
 - **Listen on `port`.** The platform passes it as the `PORT` env var; if your framework reads a different variable (e.g. Spring's `SERVER_PORT`), set that in `.env` to the same value. The health check and Traefik both target `port`, so the app *must* actually listen there.
 - **Expose the health endpoint** at `health` and return 2xx when ready.
-- **Ship `wget` or `curl` in the image** — the generated health check shells out to one of them. Minimal `scratch`/distroless images have neither; add one (as `examples/go-hello`'s Dockerfile does with `apk add wget`), or take over the compose file with `manual: true` and define your own `HEALTHCHECK`.
+- **No health tooling needed in the image** — the platform probes the `health` path over HTTP itself, so `scratch`/distroless/plain-Python images work without `wget`, `curl`, or a `HEALTHCHECK`.
 - **Handle SIGTERM gracefully** — finish in-flight requests, then exit within 30s.
 
 See `examples/go-hello` for a complete reference app. If you set `manual: true`, your compose file must still define a `healthcheck` — the rolling deploy waits on Docker's health status and will otherwise time out.

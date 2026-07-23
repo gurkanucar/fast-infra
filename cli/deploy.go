@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -105,7 +106,7 @@ func deploy(name, tag string) error {
 			}
 			step++
 			fmt.Printf("  [%d/%d] waiting for new replica to become healthy...\n", step, app.Replicas)
-			if err := waitHealthy(newIDs, 120*time.Second); err != nil {
+			if err := waitHealthy(newIDs, app.Port, app.Health, 120*time.Second); err != nil {
 				fmt.Println("  health check failed — removing this replica and stopping the rollout.")
 				for _, id := range newIDs {
 					dockerOut("rm", "-f", id)
@@ -167,20 +168,48 @@ func diff(all, old []string) []string {
 	return out
 }
 
-func waitHealthy(ids []string, timeout time.Duration) error {
+var healthClient = &http.Client{Timeout: 3 * time.Second}
+
+// probeHealthy reports whether a container is running and answers 2xx/3xx at its
+// health path. The GET is made from here (host or panel) over the platform
+// network, so the app image needs no wget/curl of its own.
+func probeHealthy(id string, port int, health string) (ok, exited bool) {
+	st, err := dockerOut("inspect", "-f", "{{.State.Status}}", id)
+	if err != nil {
+		return false, true
+	}
+	switch strings.TrimSpace(st) {
+	case "exited", "dead":
+		return false, true
+	case "running":
+		ip, err := dockerOut("inspect", "-f", "{{.NetworkSettings.Networks.platform.IPAddress}}", id)
+		if err != nil || strings.TrimSpace(ip) == "" {
+			return false, false
+		}
+		resp, err := healthClient.Get(fmt.Sprintf("http://%s:%d%s", strings.TrimSpace(ip), port, health))
+		if err != nil {
+			return false, false
+		}
+		resp.Body.Close()
+		return resp.StatusCode < 400, false
+	}
+	return false, false
+}
+
+func waitHealthy(ids []string, port int, health string, timeout time.Duration) error {
+	if !strings.HasPrefix(health, "/") {
+		health = "/" + health
+	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		healthy := 0
 		for _, id := range ids {
-			s, err := dockerOut("inspect", "-f", "{{.State.Health.Status}}", id)
-			if err != nil {
-				return fmt.Errorf("container %s disappeared during startup", id[:12])
+			ok, exited := probeHealthy(id, port, health)
+			if exited {
+				return fmt.Errorf("container %s exited during startup (check: docker logs %s)", id[:12], id[:12])
 			}
-			switch strings.TrimSpace(s) {
-			case "healthy":
+			if ok {
 				healthy++
-			case "unhealthy":
-				return fmt.Errorf("container %s is unhealthy (check its logs: docker logs %s)", id[:12], id[:12])
 			}
 		}
 		if healthy == len(ids) {
@@ -188,5 +217,5 @@ func waitHealthy(ids []string, timeout time.Duration) error {
 		}
 		time.Sleep(2 * time.Second)
 	}
-	return fmt.Errorf("timed out waiting for containers to become healthy")
+	return fmt.Errorf("timed out waiting for %d container(s) to answer 2xx at :%d%s", len(ids), port, health)
 }

@@ -30,7 +30,7 @@ func cmdStatus(args []string) error {
 			continue
 		}
 		tag := currentTag(dir)
-		running, healthy := replicaState(dir, tag)
+		running, healthy := replicaState(dir, tag, app.Port, app.Health)
 		state := "✗ down"
 		if running > 0 {
 			state = "✓ up"
@@ -54,7 +54,7 @@ func statusOne(name string) error {
 		return err
 	}
 	tag := currentTag(dir)
-	running, healthy := replicaState(dir, tag)
+	running, healthy := replicaState(dir, tag, app.Port, app.Health)
 	fmt.Printf("%s\n  image:    %s:%s\n  domain:   https://%s\n  replicas: %d healthy / %d running (want %d)\n",
 		app.Name, app.Image, tag, app.Domain, healthy, running, app.Replicas)
 
@@ -115,18 +115,18 @@ func humanAgo(t time.Time) string {
 	}
 }
 
-func replicaState(dir, tag string) (running, healthy int) {
+func replicaState(dir, tag string, port int, health string) (running, healthy int) {
+	if !strings.HasPrefix(health, "/") {
+		health = "/" + health
+	}
 	for _, id := range psQ(dir, tag) {
-		s, err := dockerOut("inspect", "-f", "{{.State.Status}} {{.State.Health.Status}}", id)
-		if err != nil {
+		ok, exited := probeHealthy(id, port, health)
+		if exited {
 			continue
 		}
-		parts := strings.Fields(strings.TrimSpace(s))
-		if len(parts) > 0 && parts[0] == "running" {
-			running++
-			if len(parts) > 1 && parts[1] == "healthy" {
-				healthy++
-			}
+		running++
+		if ok {
+			healthy++
 		}
 	}
 	return
