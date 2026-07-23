@@ -64,7 +64,13 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # Load an ACL file so per-app users created by `platform new` survive a
+    # restart. `touch` guarantees the file exists before redis loads it; `exec`
+    # keeps redis as PID 1 for signals; an empty file leaves the default user
+    # open for apps that don't opt into a scoped user.
+    command: sh -c 'touch /data/users.acl && exec redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --aclfile /data/users.acl'
+    volumes:
+      - redis_data:/data
     networks: [platform]
 
   adminer:
@@ -135,3 +141,4 @@ volumes:
   oo_data:
   le_data:
   rmq_data:
+  redis_data:

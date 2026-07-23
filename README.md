@@ -40,10 +40,18 @@ The script asks for your base domain and email, generates all passwords, install
 
 ```bash
 cd ~/fast-infra
-platform new blog          # asks image / domain / port / health path
-docker exec -it fast-infra-postgres-1 createdb -U postgres blog
+platform new blog          # prompts for image/domain/port/health, then offers
+                           # to provision a Postgres DB + scoped Redis user
 platform deploy blog v1    # or any image tag / commit SHA
 ```
+
+`platform new` ends with two optional prompts (both default to no). Say yes and it
+creates a least-privilege Postgres role that owns only its own database, and a Redis
+ACL user scoped to the `blog:*` key prefix, writing the real credentials into `.env`.
+Say no (the default) and nothing is touched — create the database yourself with
+`docker exec -it fast-infra-postgres-1 createdb -U postgres blog` and fill in the
+`.env` password. Either way, provisioning only ever creates; it never drops or
+changes existing data.
 
 Each app lives in `apps/<name>/` as three files: `app.yaml` (the definition), `.env` (secrets, chmod 600, gitignored), and a generated `docker-compose.yml`. Edit `app.yaml`, re-run `platform deploy`, done. If you need compose features the template doesn't cover, set `manual: true` in `app.yaml` and the platform will never touch your compose file again.
 
