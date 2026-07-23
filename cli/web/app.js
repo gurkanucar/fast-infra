@@ -62,8 +62,8 @@ async function loadServices() {
   svcs.forEach((s) => {
     const a = document.createElement("a");
     a.className = "svc-card";
-    a.href = s.url; a.target = "_blank"; a.rel = "noopener";
-    a.innerHTML = `<h3>${esc(s.name)} <span class="ext">↗</span></h3><p class="muted">${esc(s.desc)}</p>`;
+    a.href = s.url; a.target = "_blank"; a.rel = "noopener"; a.title = s.desc;
+    a.innerHTML = `<h3>${esc(s.name)}</h3><span class="ext">↗</span>`;
     box.appendChild(a);
   });
 }
@@ -81,9 +81,9 @@ async function loadApps() {
 function appCard(a) {
   const el = document.createElement("div");
   el.className = "app-card";
-  el.innerHTML = `<div class="badge ${a.state}">${a.state}</div>
-    <h3>${esc(a.name)}</h3><div class="dom">${esc(a.domain)}</div>
-    <div class="meta"><span>tag: ${esc(a.tag)}</span><span>${a.healthy}/${a.replicas} healthy</span></div>`;
+  el.innerHTML = `<span class="led ${a.state}" title="${a.state}"></span>
+    <div class="ac-main"><h3>${esc(a.name)}</h3><span class="dom">${esc(a.domain)}</span></div>
+    <div class="meta"><span class="chip">${esc(a.tag)}</span><span>${a.healthy}/${a.replicas}</span></div>`;
   el.onclick = () => openDetail(a.name);
   return el;
 }
