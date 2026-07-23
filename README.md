@@ -133,6 +133,16 @@ The login persists in `~/.docker/config.json`, so every later `platform deploy` 
 
 Point your app's OpenTelemetry exporter at `http://openobserve:5080/api/default` (already pre-filled in each app's generated `.env`). Java: attach the OTel javaagent. Go: otelhttp + OTLP HTTP exporter. Python/Node: the standard OTel SDKs. Logs written to stdout are viewable live in Dozzle; ship them to OpenObserve with the OTel SDK or a lightweight collector (Vector/Fluent Bit) if you want search and retention.
 
+## Web panel (optional)
+
+Everything above is CLI-first — SSH is all you need. If you'd rather click, there is an **optional** web panel that does every operation (create/deploy/rollback/scale/env/remove) from the browser:
+
+```bash
+docker compose -f infra/docker-compose.yml --profile panel up -d --build panel
+```
+
+It serves at `https://panel.<domain>` behind Traefik, and you log in with the `PANEL_PASSWORD` printed by `install.sh` (stored in `infra/.env`). It is **off by default** and a deliberate trade-off: the panel mounts the Docker socket (root-equivalent), so it is only as safe as that password — keep it strong, and don't enable it if SSH-only is enough for you. It's a single Go binary (`platform serve`) serving an embedded page; no separate frontend to build.
+
 ## Memory budgeting (4GB VPS)
 
 Infra idles around 1–1.3GB, leaving ~2.5GB for apps. Go/Node/Python services typically take 50–150MB each. Spring Boot is the heavy one: always set `-Xmx256m` (or similar), and remember that during a rolling deploy two copies of an app run simultaneously — budget for the peak, not the steady state.

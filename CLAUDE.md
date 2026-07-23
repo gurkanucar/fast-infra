@@ -12,7 +12,7 @@ A minimal self-hosted deploy platform for a single ~4GB VPS. Containerized apps 
 
 ## Deliberate architectural decisions (do not reverse casually)
 
-- **No daemon, no REST API, no web UI.** The only way in is SSH. A Docker-socket-connected HTTP API is root-equivalent and would make us responsible for auth/TLS/audit for every user's VPS. Revisit only in v3, only if the project gets real adoption.
+- **~~No daemon, no REST API, no web UI.~~** *(v3: reversed by the owner.)* The original stance was SSH-only, because a Docker-socket-connected HTTP API is root-equivalent. The owner has since chosen to add an optional web panel (`platform serve`, cli/serve.go) that does every operation behind password auth over HTTPS. It is **opt-in** (the `panel` compose service; off unless started) and single-operator. Design + accepted-risk notes: docs/design/2026-07-23-web-panel.md. Keep it stdlib-only and behind auth; do not add multi-tenant/account features (that is a different, larger security surface).
 - **CLI is stdlib-only Go, zero external dependencies.** It shells out to the `docker` CLI instead of using the Docker SDK (SDK pulls a huge dependency tree). Keep it readable in ten minutes.
 - **Traefik over Caddy/nginx** because label-based discovery means adding an app never touches central config, and `--scale` replicas are load-balanced automatically.
 - **app.yaml is a flat key:value file** parsed by hand (no YAML library). Secrets never go in app.yaml — they live in `apps/<name>/.env` (chmod 600, gitignored).
@@ -32,8 +32,9 @@ Apps must: (1) listen on `port` — the compose template injects it as the `PORT
 ```
 install.sh                  one-shot VPS bootstrap (generates all passwords)
 infra/docker-compose.yml    shared services, network name: platform
-cli/                        the `platform` binary (new/deploy/rollback/scale/status/env/remove)
+cli/                        the `platform` binary (new/deploy/rollback/scale/status/env/remove/serve)
 cli/templates/              compose template embedded via go:embed
+cli/web/                    web panel SPA (embedded via go:embed; served by `platform serve`)
 workflows/deploy-template.yml   reusable GH Actions workflow (copy into fork's .github/workflows/)
 examples/go-hello/          reference app + 10-line caller workflow
 apps/                       per-app dirs on the VPS (gitignored): app.yaml, .env, compose, .current_tag, .deployments
@@ -45,7 +46,7 @@ apps/                       per-app dirs on the VPS (gitignored): app.yaml, .env
 - v2 (**done**): `platform env` list/set/unset (cli/env.go); sequential rolling for multi-replica apps (cli/deploy.go); richer status — version age + deploy counts (cli/status.go).
 - v2.1 (release readiness): CI + stdlib unit tests, prebuilt release binaries so the VPS needs no Go, `platform remove` (cli/remove.go), Spring Boot + static-site examples, publish prep. Never touches data — `remove` leaves the Postgres DB and pushed images intact.
 - Optional provisioning: `platform new` opt-in Postgres role + scoped Redis ACL user (cli/provision.go; redis `--aclfile`). Create-only. Design doc: docs/design/2026-07-23-platform-new-provisioning.md.
-- v3 (only with real users): REST API + web UI reusing the same Go internals; app.yaml schema growth.
+- v3: **web panel — done** (`platform serve`, cli/serve.go + cli/web/), built early at the owner's request; stdlib net/http + embedded SPA + HMAC session auth, reuses the CLI internals, opt-in `panel` compose service. Still open for v3: app.yaml schema growth, streaming deploy logs.
 
 Do not build v3 features during v1/v2. When in doubt, ship less.
 

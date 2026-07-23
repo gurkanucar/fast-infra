@@ -37,38 +37,18 @@ func cmdNew(args []string) error {
 	wantDB := askYN(rd, "Create a dedicated Postgres database + user?")
 	wantRedis := askYN(rd, "Create a Redis user scoped to "+name+":*?")
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	outcome, err := createApp(app, wantDB, wantRedis)
+	if err != nil {
 		return err
 	}
-	if err := app.save(dir); err != nil {
-		return err
+	if outcome.DBCreated {
+		fmt.Printf("Created Postgres database and role %q.\n", name)
 	}
-
-	// Optional provisioning (opt-in). Best-effort: on failure keep going with
-	// the manual template so the app scaffold is never left half-created.
-	var dbPass, redisPass *string
-	if wantDB {
-		if pw, err := provisionPostgres(name); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: Postgres provisioning failed (%v)\n  create it by hand: docker exec -it %s createdb -U postgres %s\n", err, pgContainer, name)
-		} else {
-			dbPass = &pw
-			fmt.Printf("Created Postgres database and role %q.\n", name)
-		}
+	if outcome.RedisCreated {
+		fmt.Printf("Created Redis user %q scoped to %s:*\n", name, name)
 	}
-	if wantRedis {
-		if pw, err := provisionRedis(name); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: Redis provisioning failed (%v)\n", err)
-		} else {
-			redisPass = &pw
-			fmt.Printf("Created Redis user %q scoped to %s:*\n", name, name)
-		}
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(renderAppEnv(name, dbPass, redisPass)), 0o600); err != nil {
-		return err
-	}
-	if err := app.render(dir); err != nil {
-		return err
+	for _, w := range outcome.Warnings {
+		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
 
 	fmt.Printf(`
@@ -79,12 +59,75 @@ Created %s/
 
 Next:
 `, dir)
-	if dbPass == nil {
+	if !outcome.DBCreated {
 		fmt.Printf("  - Create the database: docker exec -it %s createdb -U postgres %s\n", pgContainer, name)
 	}
 	fmt.Printf("  - Point DNS %s -> this server\n", app.Domain)
 	fmt.Printf("  - Deploy:              platform deploy %s <tag>\n", name)
 	return nil
+}
+
+// provisionOutcome reports what createApp provisioned and any non-fatal
+// warnings (a failed provision leaves the manual .env template in place).
+type provisionOutcome struct {
+	DBCreated    bool
+	RedisCreated bool
+	Warnings     []string
+}
+
+// createApp scaffolds apps/<name>: app.yaml, optional Postgres/Redis
+// provisioning, .env, and the rendered compose file. Shared by the CLI (`new`)
+// and the web panel so both take exactly one path.
+func createApp(app *App, wantDB, wantRedis bool) (provisionOutcome, error) {
+	var out provisionOutcome
+	if !nameRe.MatchString(app.Name) {
+		return out, fmt.Errorf("name must be lowercase letters, digits and dashes")
+	}
+	if app.Image == "" || app.Domain == "" {
+		return out, fmt.Errorf("image and domain are required")
+	}
+	if app.Port == 0 {
+		app.Port = 8080
+	}
+	if app.Health == "" {
+		app.Health = "/health"
+	}
+	if app.Replicas == 0 {
+		app.Replicas = 1
+	}
+	dir, err := appDir(app.Name)
+	if err != nil {
+		return out, err
+	}
+	if _, err := os.Stat(dir); err == nil {
+		return out, fmt.Errorf("%s already exists", dir)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return out, err
+	}
+	if err := app.save(dir); err != nil {
+		return out, err
+	}
+
+	var dbPass, redisPass *string
+	if wantDB {
+		if pw, err := provisionPostgres(app.Name); err != nil {
+			out.Warnings = append(out.Warnings, "Postgres provisioning failed: "+err.Error())
+		} else {
+			dbPass, out.DBCreated = &pw, true
+		}
+	}
+	if wantRedis {
+		if pw, err := provisionRedis(app.Name); err != nil {
+			out.Warnings = append(out.Warnings, "Redis provisioning failed: "+err.Error())
+		} else {
+			redisPass, out.RedisCreated = &pw, true
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(renderAppEnv(app.Name, dbPass, redisPass)), 0o600); err != nil {
+		return out, err
+	}
+	return out, app.render(dir)
 }
 
 // askYN prompts for a yes/no answer, defaulting to no.

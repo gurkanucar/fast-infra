@@ -33,6 +33,7 @@ if [ ! -f infra/.env ]; then
   OO_PASSWORD="$(openssl rand -hex 16)Aa1@"
   RABBITMQ_PASSWORD=$(openssl rand -hex 16)
   DOZZLE_PLAIN=$(openssl rand -hex 8)
+  PANEL_PASSWORD=$(openssl rand -hex 12)
   # apr1 htpasswd entry; escape $ as $$ for compose interpolation.
   DOZZLE_HASH=$(openssl passwd -apr1 "$DOZZLE_PLAIN" | sed 's/\$/\$\$/g')
 
@@ -42,6 +43,7 @@ if [ ! -f infra/.env ]; then
   sed -i "s|^OO_PASSWORD=.*|OO_PASSWORD=${OO_PASSWORD}|" infra/.env
   sed -i "s|^RABBITMQ_PASSWORD=.*|RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}|" infra/.env
   sed -i "s|^DOZZLE_AUTH=.*|DOZZLE_AUTH=admin:${DOZZLE_HASH}|" infra/.env
+  sed -i "s|^PANEL_PASSWORD=.*|PANEL_PASSWORD=${PANEL_PASSWORD}|" infra/.env
 
   echo
   echo "Generated credentials (also stored in infra/.env):"
@@ -49,6 +51,7 @@ if [ ! -f infra/.env ]; then
   echo "  Postgres     postgres / ${PG_PASSWORD}"
   echo "  Dozzle       admin / ${DOZZLE_PLAIN}          -> https://tail.${BASE_DOMAIN}"
   echo "  Adminer      https://db.${BASE_DOMAIN} (login with postgres creds)"
+  echo "  Web panel    ${PANEL_PASSWORD}                -> https://panel.${BASE_DOMAIN} (optional, see below)"
   echo
 fi
 
@@ -93,3 +96,4 @@ echo "  1. Point DNS A records to this server: db/logs/tail (+ your app domains)
 echo "  2. Create your first app:   platform new myapp"
 echo "  3. Deploy it:               platform deploy myapp latest"
 echo "  Optional RabbitMQ:          docker compose -f infra/docker-compose.yml --profile rabbitmq up -d"
+echo "  Optional web panel:         docker compose -f infra/docker-compose.yml --profile panel up -d --build panel   (then https://panel.${BASE_DOMAIN:-<domain>})"

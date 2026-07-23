@@ -1,0 +1,11 @@
+# Keep the panel build context (repo root) lean and secret-free. Apps are
+# bind-mounted into the panel at runtime, not baked into the image.
+.git
+apps
+infra/.env
+infra/backups
+docs
+examples
+*.exe
+cli/platform
+platform
