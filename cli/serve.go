@@ -110,6 +110,11 @@ func cmdServe(args []string) error {
 	mux.HandleFunc("PUT /api/apps/{name}/env", requireAuth(handleEnvPut))
 	mux.HandleFunc("POST /api/apps/{name}/provision", requireAuth(handleProvision))
 	mux.HandleFunc("GET /api/services", requireAuth(handleServices))
+	mux.HandleFunc("GET /api/github/status", requireAuth(handleGithubStatus))
+	mux.HandleFunc("POST /api/github/connect", requireAuth(handleGithubConnect))
+	mux.HandleFunc("POST /api/github/poll", requireAuth(handleGithubPoll))
+	mux.HandleFunc("POST /api/github/disconnect", requireAuth(handleGithubDisconnect))
+	mux.HandleFunc("GET /api/github/repos", requireAuth(handleGithubRepos))
 
 	fmt.Println("panel listening on", addr)
 	return http.ListenAndServe(addr, mux)

@@ -1,7 +1,7 @@
 # Web panel image: the platform binary in `serve` mode, plus the docker CLI +
 # compose plugin so it can drive deploys through the mounted socket.
 # Build context is the repo root (needs cli/ for the embedded web assets).
-FROM golang:1.22-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY cli/ ./cli/
 RUN cd cli && CGO_ENABLED=0 go build -ldflags="-s -w" -o /platform .

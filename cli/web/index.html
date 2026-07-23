@@ -23,7 +23,8 @@
     <header class="topbar">
       <div class="brand">fast-infra<span class="cur">▊</span> <span class="muted">panel</span></div>
       <div class="actions">
-        <button id="new-btn" class="primary">+ New app</button>
+        <button id="gh-btn" class="primary">Deploy from GitHub</button>
+        <button id="new-btn" class="ghost">+ New app</button>
         <button id="refresh-btn" class="ghost">Refresh</button>
         <button class="ghost theme-toggle" title="Toggle theme">◐</button>
         <button id="logout-btn" class="ghost">Sign out</button>
@@ -49,6 +50,15 @@
       <div class="actions"><button class="ghost theme-toggle" title="Toggle theme">◐</button><button id="detail-logout" class="ghost">Sign out</button></div>
     </header>
     <main id="detail-body"></main>
+  </div>
+
+  <!-- GitHub modal -->
+  <div id="github-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="close" data-close>&times;</button>
+      <h2>Deploy from GitHub</h2>
+      <div id="gh-body"></div>
+    </div>
   </div>
 
   <!-- New app modal -->
