@@ -1,0 +1,7 @@
+# Copy this into apps/go-hello/app.yaml on the VPS (or run `platform new go-hello`).
+name: go-hello
+image: ghcr.io/YOUR_USER/go-hello
+domain: hello.example.com
+port: 8080
+health: /health
+replicas: 1
