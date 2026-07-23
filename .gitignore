@@ -6,4 +6,8 @@ apps/*/
 
 # Local build artifacts
 cli/platform
+platform
 *.exe
+
+# Local tooling / editor state
+.claude/
