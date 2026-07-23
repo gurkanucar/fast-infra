@@ -135,11 +135,13 @@ func putRepoFile(owner, repo, path, content, message, branch string) error {
 	return ghPut(fmt.Sprintf("/repos/%s/%s/contents/%s", owner, repo, path), b)
 }
 
-func callerWorkflow(app, branch string) string {
+// callerWorkflow references the operator's own fast-infra fork
+// (<owner>/fast-infra) so it works for any install, not just the maintainer's.
+func callerWorkflow(owner, app, branch string) string {
 	return fmt.Sprintf(`name: deploy
 on:
   push:
-    branches: [%[2]s]
+    branches: [%[3]s]
   workflow_dispatch:
     inputs:
       tag:
@@ -147,12 +149,19 @@ on:
         required: false
 jobs:
   deploy:
-    uses: gurkanucar/fast-infra/.github/workflows/deploy-template.yml@master
+    uses: %[1]s/fast-infra/.github/workflows/deploy-template.yml@master
     with:
-      app_name: %[1]s
+      app_name: %[2]s
       tag: ${{ inputs.tag || '' }}
     secrets: inherit
-`, app, branch)
+`, owner, app, branch)
+}
+
+// ghAllowReusable lets the operator's other repos use the private fast-infra
+// fork's reusable workflow (Settings → Actions → Access = "user").
+func ghAllowReusable(owner string) error {
+	return ghPut(fmt.Sprintf("/repos/%s/fast-infra/actions/permissions/access", owner),
+		[]byte(`{"access_level":"user"}`))
 }
 
 func envOr(k, def string) string {
@@ -214,7 +223,10 @@ func handleGithubDeploy(w http.ResponseWriter, r *http.Request) {
 			warnings = append(warnings, "secret "+s.n+": "+err.Error())
 		}
 	}
-	if err := putRepoFile(body.Owner, body.Repo, ".github/workflows/deploy.yml", callerWorkflow(body.Repo, body.Branch), "Add fast-infra deploy workflow", body.Branch); err != nil {
+	if err := ghAllowReusable(body.Owner); err != nil {
+		warnings = append(warnings, "couldn't auto-allow the fast-infra reusable workflow (make "+body.Owner+"/fast-infra public or set Actions access to \"user\"): "+err.Error())
+	}
+	if err := putRepoFile(body.Owner, body.Repo, ".github/workflows/deploy.yml", callerWorkflow(body.Owner, body.Repo, body.Branch), "Add fast-infra deploy workflow", body.Branch); err != nil {
 		warnings = append(warnings, "workflow: "+err.Error())
 	}
 	writeJSON(w, 200, map[string]any{"warnings": warnings, "branch": body.Branch})
