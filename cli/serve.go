@@ -100,6 +100,7 @@ func cmdServe(args []string) error {
 	mux.HandleFunc("GET /api/apps", requireAuth(handleList))
 	mux.HandleFunc("POST /api/apps", requireAuth(handleCreate))
 	mux.HandleFunc("GET /api/apps/{name}", requireAuth(handleDetail))
+	mux.HandleFunc("PUT /api/apps/{name}/config", requireAuth(handleUpdateConfig))
 	mux.HandleFunc("DELETE /api/apps/{name}", requireAuth(handleRemove))
 	mux.HandleFunc("POST /api/apps/{name}/deploy", requireAuth(handleDeploy))
 	mux.HandleFunc("POST /api/apps/{name}/stop", requireAuth(handleStop))
@@ -187,6 +188,8 @@ type appInfo struct {
 	Name     string `json:"name"`
 	Image    string `json:"image"`
 	Domain   string `json:"domain"`
+	Port     int    `json:"port"`
+	Health   string `json:"health"`
 	Tag      string `json:"tag"`
 	Replicas int    `json:"replicas"`
 	Running  int    `json:"running"`
@@ -211,7 +214,54 @@ func appInfoFor(name string) (*appInfo, error) {
 			state = "degraded"
 		}
 	}
-	return &appInfo{app.Name, app.Image, app.Domain, tag, app.Replicas, running, healthy, state}, nil
+	return &appInfo{app.Name, app.Image, app.Domain, app.Port, app.Health, tag, app.Replicas, running, healthy, state}, nil
+}
+
+// handleUpdateConfig edits an app's image/domain/port/health in app.yaml and
+// re-renders the compose file. Takes effect on the next deploy.
+func handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	dir, err := appDir(name)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	app, err := loadApp(dir)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	var body struct {
+		Image  string `json:"image"`
+		Domain string `json:"domain"`
+		Port   int    `json:"port"`
+		Health string `json:"health"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if body.Image != "" {
+		app.Image = body.Image
+	}
+	if body.Domain != "" {
+		app.Domain = body.Domain
+	}
+	if body.Port != 0 {
+		app.Port = body.Port
+	}
+	if body.Health != "" {
+		app.Health = body.Health
+	}
+	if err := app.save(dir); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if err := app.render(dir); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
 func handleList(w http.ResponseWriter, r *http.Request) {
