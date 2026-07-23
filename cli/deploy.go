@@ -78,41 +78,53 @@ func deploy(name, tag string) error {
 		return err
 	}
 
-	fmt.Printf("Deploying %s:%s (%d replica(s))\n", app.Image, tag, app.Replicas)
+	fmt.Printf("Deploying %s:%s (%d replica(s), one at a time)\n", app.Image, tag, app.Replicas)
 	if err := dc(dir, tag, "pull", "app"); err != nil {
 		return fmt.Errorf("pull failed: %w", err)
 	}
 
-	oldIDs := psQ(dir, tag)
-	target := len(oldIDs) + app.Replicas
-	if err := dc(dir, tag, "up", "-d", "--no-recreate", "--scale", "app="+strconv.Itoa(target)); err != nil {
-		recordDeployment(dir, tag, "failed")
-		return fmt.Errorf("starting new replicas failed: %w", err)
-	}
-
-	newIDs := diff(psQ(dir, tag), oldIDs)
-	if len(newIDs) == 0 {
-		recordDeployment(dir, tag, "failed")
-		return fmt.Errorf("no new containers were created")
-	}
-
-	fmt.Printf("Waiting for %d new container(s) to become healthy...\n", len(newIDs))
-	if err := waitHealthy(newIDs, 120*time.Second); err != nil {
-		fmt.Println("Health check failed — rolling back new containers, old ones keep serving.")
-		for _, id := range newIDs {
-			dockerOut("rm", "-f", id)
+	// Sequential rolling: add one new replica, wait for it to pass its health
+	// check, then drain one old replica — repeat until the old set is gone and
+	// `replicas` new ones are up. Peak container count is replicas+1 rather than
+	// 2×replicas, which matters on a small VPS (a Spring Boot app that needs
+	// -Xmx256m no longer needs double that headroom to deploy). The Traefik
+	// retry middleware keeps each brief swap window free of dropped requests.
+	old := psQ(dir, tag) // containers running the previous image
+	added, step := 0, 0
+	for added < app.Replicas || len(old) > 0 {
+		if added < app.Replicas {
+			before := psQ(dir, tag)
+			if err := dc(dir, tag, "up", "-d", "--no-recreate", "--scale", "app="+strconv.Itoa(len(before)+1)); err != nil {
+				recordDeployment(dir, tag, "failed")
+				return fmt.Errorf("starting new replica failed: %w", err)
+			}
+			newIDs := diff(psQ(dir, tag), before)
+			if len(newIDs) == 0 {
+				recordDeployment(dir, tag, "failed")
+				return fmt.Errorf("no new container was created")
+			}
+			step++
+			fmt.Printf("  [%d/%d] waiting for new replica to become healthy...\n", step, app.Replicas)
+			if err := waitHealthy(newIDs, 120*time.Second); err != nil {
+				fmt.Println("  health check failed — removing this replica and stopping the rollout.")
+				for _, id := range newIDs {
+					dockerOut("rm", "-f", id)
+				}
+				recordDeployment(dir, tag, "failed")
+				return err
+			}
+			added++
 		}
-		recordDeployment(dir, tag, "failed")
-		return err
-	}
-
-	fmt.Println("New replicas healthy. Draining old containers...")
-	for _, id := range oldIDs {
-		if _, err := dockerOut("stop", "-t", "30", id); err == nil {
-			dockerOut("rm", id)
+		if len(old) > 0 {
+			id := old[0]
+			old = old[1:]
+			if _, err := dockerOut("stop", "-t", "30", id); err == nil {
+				dockerOut("rm", id)
+			}
 		}
 	}
-	// Settle desired state (also handles the very first deploy).
+	// Settle to exactly the desired count (no-op in the common case; also the
+	// path for the very first deploy, where there were no old containers).
 	if err := dc(dir, tag, "up", "-d", "--no-recreate", "--scale", "app="+strconv.Itoa(app.Replicas)); err != nil {
 		return err
 	}
