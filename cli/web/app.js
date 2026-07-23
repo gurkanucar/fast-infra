@@ -23,31 +23,52 @@ function toast(msg, err = false) {
 }
 
 function show(view) {
-  $("#login").classList.toggle("hidden", view !== "login");
-  $("#app").classList.toggle("hidden", view !== "app");
+  ["login", "app", "detail"].forEach((v) => $("#" + v).classList.toggle("hidden", v !== view));
 }
-
 function openModal(sel) { $(sel).classList.remove("hidden"); }
 function closeModals() { $$(".modal").forEach((m) => m.classList.add("hidden")); }
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 async function init() {
   const r = await api("GET", "/api/me");
-  if (r.ok) { show("app"); loadApps(); } else { show("login"); }
+  if (r.ok) { toDashboard(); } else { show("login"); }
 }
+function toDashboard() { show("app"); loadServices(); loadApps(); }
 
+/* ---- auth ---- */
 $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("#login-error").textContent = "";
   const r = await api("POST", "/api/login", { password: $("#password").value });
-  if (r.ok) { $("#password").value = ""; show("app"); loadApps(); }
+  if (r.ok) { $("#password").value = ""; toDashboard(); }
   else { $("#login-error").textContent = (r.data && r.data.error) || "Login failed"; }
 });
-$("#logout-btn").onclick = async () => { await api("POST", "/api/logout"); show("login"); };
-$("#refresh-btn").onclick = loadApps;
+const logout = async () => { await api("POST", "/api/logout"); show("login"); };
+$("#logout-btn").onclick = logout;
+$("#detail-logout").onclick = logout;
+$("#refresh-btn").onclick = () => { loadServices(); loadApps(); };
 $("#new-btn").onclick = () => openModal("#new-modal");
+$("#back-btn").onclick = toDashboard;
 $$("[data-close]").forEach((b) => (b.onclick = closeModals));
 $$(".modal").forEach((m) => m.addEventListener("click", (e) => { if (e.target === m) closeModals(); }));
 
+/* ---- services ---- */
+async function loadServices() {
+  const r = await api("GET", "/api/services");
+  const box = $("#services");
+  box.innerHTML = "";
+  const svcs = ((r.data && r.data.services) || []).filter((s) => s.running);
+  if (!svcs.length) { box.innerHTML = '<p class="muted">No service UIs detected.</p>'; return; }
+  svcs.forEach((s) => {
+    const a = document.createElement("a");
+    a.className = "svc-card";
+    a.href = s.url; a.target = "_blank"; a.rel = "noopener";
+    a.innerHTML = `<h3>${esc(s.name)} <span class="ext">↗</span></h3><p class="muted">${esc(s.desc)}</p>`;
+    box.appendChild(a);
+  });
+}
+
+/* ---- app list ---- */
 async function loadApps() {
   const r = await api("GET", "/api/apps");
   if (!r.ok) { toast("Failed to load apps", true); return; }
@@ -55,12 +76,9 @@ async function loadApps() {
   grid.innerHTML = "";
   const apps = r.data || [];
   $("#empty").classList.toggle("hidden", apps.length > 0);
-  apps.forEach((a) => grid.appendChild(card(a)));
+  apps.forEach((a) => grid.appendChild(appCard(a)));
 }
-
-function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
-
-function card(a) {
+function appCard(a) {
   const el = document.createElement("div");
   el.className = "app-card";
   el.innerHTML = `<div class="badge ${a.state}">${a.state}</div>
@@ -70,43 +88,76 @@ function card(a) {
   return el;
 }
 
+/* ---- detail page ---- */
 async function openDetail(name) {
   const r = await api("GET", "/api/apps/" + encodeURIComponent(name));
   if (!r.ok) { toast("Not found", true); return; }
-  const { app, history } = r.data;
-  const hist = (history || []).slice().reverse().slice(0, 8)
+  const { app, history, db, redis } = r.data;
+  $("#detail-name").textContent = app.name;
+  const hist = (history || []).slice().reverse().slice(0, 12)
     .map((h) => `<li><span class="${h.status === "success" ? "ok" : "fail"}">${h.status === "success" ? "✓" : "✗"}</span><b>${esc(h.tag)}</b><span class="muted">${new Date(h.time).toLocaleString()}</span></li>`)
     .join("") || '<li class="muted">no deployments yet</li>';
-  const body = $("#detail-body");
-  body.className = "detail";
-  body.innerHTML = `
-    <h2>${esc(app.name)} <span class="badge ${app.state}">${app.state}</span></h2>
-    <div class="sub">${esc(app.image)}:${esc(app.tag)} &middot; <a href="https://${esc(app.domain)}" target="_blank" rel="noopener">${esc(app.domain)}</a></div>
-    <div class="stat-row">
-      <div class="stat"><b>${app.healthy}/${app.replicas}</b><span>healthy</span></div>
-      <div class="stat"><b>${app.running}</b><span>running</span></div>
-      <div class="stat"><b>${esc(app.tag)}</b><span>current tag</span></div>
+  const dbBadge = db ? '<span class="badge up">provisioned</span>' : '<span class="badge down">not set up</span>';
+  const rdBadge = redis ? '<span class="badge up">scoped user</span>' : '<span class="badge down">not set up</span>';
+
+  $("#detail-body").innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="sub"><span class="badge ${app.state}">${app.state}</span> ${esc(app.image)}:${esc(app.tag)}</div>
+        <a class="dom-link" href="https://${esc(app.domain)}" target="_blank" rel="noopener">${esc(app.domain)} ↗</a>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><b>${app.healthy}/${app.replicas}</b><span>healthy</span></div>
+        <div class="stat"><b>${app.running}</b><span>running</span></div>
+      </div>
     </div>
-    <div class="section"><h4>Deploy</h4>
-      <div class="inline"><input id="deploy-tag" placeholder="tag (default latest)"><button class="primary" id="do-deploy">Deploy</button><button id="do-rollback">Rollback</button></div>
-    </div>
-    <div class="section"><h4>Scale</h4>
-      <div class="inline"><input id="scale-n" type="number" min="1" value="${app.replicas}" style="max-width:110px"><button id="do-scale">Scale</button></div>
-    </div>
-    <div class="section"><h4>Environment</h4><div id="env-list"></div>
-      <button id="env-add" class="ghost">+ Add variable</button>
-      <div class="inline" style="margin-top:.6rem"><button class="primary" id="env-save">Save env</button><span class="muted" style="font-size:.82rem">applied on next deploy</span></div>
-    </div>
-    <div class="section"><h4>History</h4><ul class="hist">${hist}</ul></div>
-    <div class="section"><h4>Danger zone</h4><button class="danger" id="do-remove">Remove app</button></div>`;
+    <div class="detail-grid">
+      <div class="col">
+        <div class="card sect">
+          <h4>Deploy</h4>
+          <div class="inline"><input id="deploy-tag" placeholder="tag (default latest)"><button class="primary" id="do-deploy">Deploy</button><button id="do-rollback">Rollback</button></div>
+        </div>
+        <div class="card sect">
+          <h4>Scale</h4>
+          <div class="inline"><input id="scale-n" type="number" min="1" value="${app.replicas}" style="max-width:110px"><button id="do-scale">Scale</button></div>
+        </div>
+        <div class="card sect">
+          <h4>Environment</h4>
+          <div id="env-list"></div>
+          <button id="env-add" class="ghost">+ Add variable</button>
+          <div class="inline" style="margin-top:.6rem"><button class="primary" id="env-save">Save env</button><span class="muted small">applied on next deploy</span></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card sect">
+          <h4>Data</h4>
+          <div class="data-row">Postgres ${dbBadge} <button class="ghost small" id="prov-db">${db ? "Reset" : "Create DB + user"}</button></div>
+          <div class="data-row">Redis ${rdBadge} <button class="ghost small" id="prov-redis">${redis ? "Reset" : "Create scoped user"}</button></div>
+          <p class="muted small">Credentials are written to the app's .env; apply with a deploy.</p>
+        </div>
+        <div class="card sect">
+          <h4>History</h4>
+          <ul class="hist">${hist}</ul>
+        </div>
+        <div class="card sect danger-card">
+          <h4>Danger zone</h4>
+          <label class="check small"><input type="checkbox" id="keep-files"> Keep files (only stop containers)</label>
+          <button class="danger" id="do-remove">Remove app</button>
+        </div>
+      </div>
+    </div>`;
+
   $("#do-deploy").onclick = () => act(name, "deploy", { tag: $("#deploy-tag").value.trim() }, "#do-deploy", "Deploying…");
   $("#do-rollback").onclick = () => act(name, "rollback", {}, "#do-rollback", "Rolling back…");
   $("#do-scale").onclick = () => act(name, "scale", { replicas: +$("#scale-n").value }, "#do-scale", "Scaling…");
-  $("#do-remove").onclick = () => removeApp(name);
+  $("#prov-db").onclick = () => provision(name, { db: true }, "#prov-db");
+  $("#prov-redis").onclick = () => provision(name, { redis: true }, "#prov-redis");
+  $("#do-remove").onclick = () => removeApp(name, $("#keep-files").checked);
   $("#env-add").onclick = () => addEnvRow("", "");
   $("#env-save").onclick = () => saveEnv(name);
   loadEnv(name);
-  openModal("#detail-modal");
+  show("detail");
+  window.scrollTo(0, 0);
 }
 
 async function act(name, action, body, btnSel, busy) {
@@ -114,10 +165,21 @@ async function act(name, action, body, btnSel, busy) {
   btn.disabled = true; btn.textContent = busy;
   const r = await api("POST", `/api/apps/${encodeURIComponent(name)}/${action}`, body);
   btn.disabled = false; btn.textContent = orig;
-  if (r.ok) { toast(`${action} succeeded`); openDetail(name); loadApps(); }
+  if (r.ok) { toast(`${action} succeeded`); openDetail(name); }
   else { toast((r.data && r.data.error) || `${action} failed`, true); }
 }
 
+async function provision(name, body, btnSel) {
+  const btn = $(btnSel), orig = btn.textContent;
+  btn.disabled = true; btn.textContent = "Working…";
+  const r = await api("POST", `/api/apps/${encodeURIComponent(name)}/provision`, body);
+  btn.disabled = false; btn.textContent = orig;
+  const warns = (r.data && r.data.warnings) || [];
+  if (r.ok && !warns.length) { toast("Provisioned — deploy to apply"); openDetail(name); }
+  else { toast(warns.join("; ") || "Provision failed", true); }
+}
+
+/* ---- env editor ---- */
 let envRemoved = new Set(), envOrig = {};
 async function loadEnv(name) {
   envRemoved = new Set(); envOrig = {};
@@ -147,13 +209,17 @@ async function saveEnv(name) {
   else { toast((r.data && r.data.error) || "Env save failed", true); }
 }
 
-async function removeApp(name) {
-  if (!confirm(`Remove ${name}? Containers stop and apps/${name} is deleted.\nThe Postgres database and pushed images are left intact.`)) return;
-  const r = await api("DELETE", `/api/apps/${encodeURIComponent(name)}`);
-  if (r.ok) { toast(`${name} removed`); closeModals(); loadApps(); }
+async function removeApp(name, keepFiles) {
+  const msg = keepFiles
+    ? `Stop ${name}'s containers? Files are kept so you can redeploy later.`
+    : `Remove ${name}? Containers stop and apps/${name} is deleted.\nThe Postgres database and pushed images are left intact.`;
+  if (!confirm(msg)) return;
+  const r = await api("DELETE", `/api/apps/${encodeURIComponent(name)}?keepFiles=${keepFiles}`);
+  if (r.ok) { toast(keepFiles ? `${name} stopped` : `${name} removed`); toDashboard(); }
   else { toast("Remove failed", true); }
 }
 
+/* ---- create ---- */
 $("#new-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target, g = (n) => f.elements[n];
