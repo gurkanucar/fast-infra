@@ -217,3 +217,15 @@ main { max-width: 1080px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
 .cred code { font-family: var(--mono); color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cred .copy { padding: .2rem .55rem; font-size: .72rem; font-weight: 600; flex: none; }
 .theme-toggle { font-size: 1rem; padding: .5rem .6rem; }
+
+/* Loading + spinner */
+.loading { display: flex; align-items: center; gap: .6rem; padding: 1.4rem; color: var(--muted); font-size: .9rem; }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border-2); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Streamed deploy log */
+.op-log { margin: .7rem 0 0; padding: .7rem .8rem; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; font-family: var(--mono); font-size: .78rem; line-height: 1.5; color: var(--text); max-height: 280px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+
+/* Dozzle logs link on the detail header */
+.logs-link { font-family: var(--mono); font-size: .82rem; text-decoration: none; color: var(--muted); font-weight: 600; margin-left: .8rem; }
+.logs-link:hover { color: var(--accent); }

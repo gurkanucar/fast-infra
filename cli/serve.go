@@ -10,14 +10,55 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+// streamRun re-executes the platform binary with args and streams its combined
+// output to the client line by line, so the browser shows deploy progress live.
+func streamRun(w http.ResponseWriter, args ...string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	fl, _ := w.(http.Flusher)
+	cmd := exec.Command(os.Args[0], args...)
+	pr, pw := io.Pipe()
+	cmd.Stdout, cmd.Stderr = pw, pw
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(w, "failed to start: %v\n", err)
+		return
+	}
+	errc := make(chan error, 1)
+	go func() { errc <- cmd.Wait(); pw.Close() }()
+	buf := make([]byte, 512)
+	for {
+		n, err := pr.Read(buf)
+		if n > 0 {
+			w.Write(buf[:n])
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	if err := <-errc; err != nil {
+		fmt.Fprintf(w, "\n✖ failed: %v\n", err)
+	} else {
+		io.WriteString(w, "\n✔ done\n")
+	}
+	if fl != nil {
+		fl.Flush()
+	}
+}
 
 //go:embed web
 var webFS embed.FS
@@ -188,18 +229,32 @@ func handleList(w http.ResponseWriter, r *http.Request) {
 
 func handleDetail(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	info, err := appInfoFor(name)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+	// The replica state and the Postgres/Redis checks each shell out to docker;
+	// run them concurrently so the detail view loads quickly.
+	var (
+		info    *appInfo
+		infoErr error
+		db, rd  bool
+		wg      sync.WaitGroup
+	)
+	wg.Add(3)
+	go func() { defer wg.Done(); info, infoErr = appInfoFor(name) }()
+	go func() { defer wg.Done(); db = pgHasDB(name) }()
+	go func() { defer wg.Done(); rd = redisHasUser(name) }()
+	wg.Wait()
+	if infoErr != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": infoErr.Error()})
 		return
 	}
-	dir := filepath.Join("apps", name)
-	hist, _ := readHistory(dir)
-	writeJSON(w, 200, map[string]any{"app": info, "history": hist, "db": pgHasDB(name), "redis": redisHasUser(name)})
+	hist, _ := readHistory(filepath.Join("apps", name))
+	writeJSON(w, 200, map[string]any{"app": info, "history": hist, "db": db, "redis": rd})
 }
 
 // pgHasDB reports whether a Postgres database named after the app exists.
 func pgHasDB(name string) bool {
+	if !nameRe.MatchString(name) {
+		return false
+	}
 	out, err := dockerOut("exec", pgContainer, "psql", "-U", "postgres", "-tAc",
 		"SELECT 1 FROM pg_database WHERE datname='"+name+"'")
 	return err == nil && strings.TrimSpace(out) == "1"
@@ -207,6 +262,9 @@ func pgHasDB(name string) bool {
 
 // redisHasUser reports whether a scoped Redis ACL user for the app exists.
 func redisHasUser(name string) bool {
+	if !nameRe.MatchString(name) {
+		return false
+	}
 	out, err := dockerOut("exec", redisContainer, "redis-cli", "ACL", "GETUSER", name)
 	return err == nil && strings.TrimSpace(out) != ""
 }
@@ -268,12 +326,7 @@ func handleStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	tag := currentTag(dir)
-	if err := deploy(name, tag); err != nil {
-		writeErr(w, err)
-		return
-	}
-	writeJSON(w, 200, map[string]string{"started": tag})
+	streamRun(w, "deploy", name, currentTag(dir))
 }
 
 type serviceLink struct {
@@ -358,30 +411,11 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 	if tag == "" {
 		tag = "latest"
 	}
-	if err := deploy(name, tag); err != nil {
-		writeErr(w, err)
-		return
-	}
-	writeJSON(w, 200, map[string]string{"deployed": tag})
+	streamRun(w, "deploy", name, tag)
 }
 
 func handleRollback(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	dir, err := appDir(name)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	prev, ok := previousSuccess(dir, currentTag(dir))
-	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no previous successful deployment"})
-		return
-	}
-	if err := deploy(name, prev); err != nil {
-		writeErr(w, err)
-		return
-	}
-	writeJSON(w, 200, map[string]string{"rolledBackTo": prev})
+	streamRun(w, "rollback", r.PathValue("name"))
 }
 
 func handleScale(w http.ResponseWriter, r *http.Request) {
