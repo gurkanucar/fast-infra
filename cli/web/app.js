@@ -159,17 +159,26 @@ async function ghRenderRepos(user) {
   const r = await api("GET", "/api/github/repos");
   if (!r.ok) { body.innerHTML = `<p class="error">${esc((r.data && r.data.error) || "Failed to load repos")}</p>`; return; }
   const repos = r.data || [];
-  body.innerHTML = `<div class="gh-head"><span class="muted small">${user ? "Connected as " + esc(user) + " · " : ""}pick a repo</span><button class="ghost small" id="gh-disconnect">Disconnect</button></div><div class="repo-list"></div>`;
+  body.innerHTML = `<div class="gh-head"><span class="muted small">${user ? "Connected as " + esc(user) + " · " : ""}pick a repo</span><button class="ghost small" id="gh-disconnect">Disconnect</button></div>
+    <input id="repo-search" placeholder="Search repositories…" autocomplete="off">
+    <div class="repo-list"></div>`;
   $("#gh-disconnect").onclick = async () => { await api("POST", "/api/github/disconnect"); ghRenderConnect(); };
   const list = $(".repo-list");
-  if (!repos.length) { list.innerHTML = '<p class="muted small">No repositories.</p>'; return; }
-  repos.forEach((rp) => {
-    const el = document.createElement("div");
-    el.className = "repo-item";
-    el.innerHTML = `<div class="ri-info"><b>${esc(rp.name)}</b> ${rp.private ? '<span class="off-tag">private</span>' : ""}<div class="muted small">${esc(rp.fullName)}${rp.language ? " · " + esc(rp.language) : ""}</div></div><button class="primary small">Deploy</button>`;
-    el.querySelector("button").onclick = () => ghDeployRepo(rp);
-    list.appendChild(el);
-  });
+  const draw = (q) => {
+    list.innerHTML = "";
+    const hits = repos.filter((rp) => !q || rp.name.toLowerCase().includes(q) || (rp.fullName || "").toLowerCase().includes(q));
+    if (!hits.length) { list.innerHTML = '<p class="muted small">No matching repositories.</p>'; return; }
+    hits.forEach((rp) => {
+      const el = document.createElement("div");
+      el.className = "repo-item";
+      el.innerHTML = `<div class="ri-info"><b>${esc(rp.name)}</b> ${rp.private ? '<span class="off-tag">private</span>' : ""}<div class="muted small">${esc(rp.fullName)}${rp.language ? " · " + esc(rp.language) : ""}</div></div><button class="primary small">Deploy</button>`;
+      el.querySelector("button").onclick = () => ghDeployRepo(rp);
+      list.appendChild(el);
+    });
+  };
+  draw("");
+  const search = $("#repo-search");
+  search.oninput = () => draw(search.value.trim().toLowerCase());
 }
 function ghDeployRepo(rp) {
   const dom = baseDomain ? `${rp.name}.${baseDomain}` : `${rp.name}.example.com`;

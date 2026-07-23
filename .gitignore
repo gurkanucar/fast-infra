@@ -1,6 +1,7 @@
 # Runtime state on the VPS — never commit
 infra/.env
 infra/.gh_token
+infra/.gh_deploy_key
 infra/backups/
 apps/*/
 !apps/.gitkeep

@@ -143,6 +143,8 @@ docker compose -f infra/docker-compose.yml --profile panel up -d --build panel
 
 It serves at `https://panel.<domain>` behind Traefik, and you log in with the `PANEL_PASSWORD` printed by `install.sh` (stored in `infra/.env`). It also lists the other services with copy-to-clipboard login details, has a light/dark toggle, and can stop/start an app as well as deploy it. It is **off by default** and a deliberate trade-off: the panel mounts the Docker socket (root-equivalent), so it is only as safe as that password — keep it strong, and don't enable it if SSH-only is enough for you. It's a single Go binary (`platform serve`) serving an embedded page; no separate frontend to build.
 
+**Deploy from GitHub.** The panel can connect to GitHub (device flow — enter a code at `github.com/login/device`, no token to paste) and set an app up hands-off: pick a repo, and it creates the app, generates an SSH deploy key, writes the `VPS_HOST`/`VPS_USER`/`VPS_SSH_KEY` secrets, and commits the caller workflow on your chosen branch. Push to that branch and it builds and deploys. The repo needs a `Dockerfile`, and your `<you>/fast-infra` fork must be reachable by the workflow — either public (simplest) or with Actions access set to your account.
+
 ## Memory budgeting (4GB VPS)
 
 Infra idles around 1–1.3GB, leaving ~2.5GB for apps. Go/Node/Python services typically take 50–150MB each. Spring Boot is the heavy one: always set `-Xmx256m` (or similar), and remember that during a rolling deploy two copies of an app run simultaneously — budget for the peak, not the steady state.
