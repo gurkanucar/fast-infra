@@ -30,7 +30,7 @@ No Kubernetes, no daemon, no web UI. A ~4GB VPS comfortably runs the platform pl
 Requirements: a Linux VPS (~4GB RAM recommended, amd64 or arm64), Docker + compose plugin, and a domain you control. The install script downloads a prebuilt `platform` binary; Go is only needed as a fallback (unusual arch, or building from source).
 
 ```bash
-git clone https://github.com/YOUR_USER/fast-infra ~/fast-infra
+git clone https://github.com/gurkanucar/fast-infra ~/fast-infra
 cd ~/fast-infra && ./install.sh
 ```
 
@@ -116,7 +116,7 @@ Fork this repo and copy `workflows/deploy-template.yml` to `.github/workflows/de
 **GHCR is private by default, so the VPS must be able to pull it.** `platform deploy` runs `docker compose pull`, which fails with `denied`/`unauthorized` on a private package. Either make the package public (repo → Packages → package → *Package settings* → *Change visibility* → Public), or log the VPS in once with a personal access token that has `read:packages`:
 
 ```bash
-echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_USER --password-stdin
+echo "$GHCR_PAT" | docker login ghcr.io -u gurkanucar --password-stdin
 ```
 
 The login persists in `~/.docker/config.json`, so every later `platform deploy` can pull. A read-only token is enough — the VPS never pushes.

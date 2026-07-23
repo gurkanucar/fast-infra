@@ -1,5 +1,5 @@
 # App-side workflow: ~10 lines, everything else lives in the reusable template.
-# Replace YOUR_USER/fast-infra with your fork. This file only takes effect when
+# Replace gurkanucar/fast-infra with your fork. This file only takes effect when
 # go-hello lives in its own repository (GitHub reads workflows from .github/ at repo root).
 name: deploy
 
@@ -14,7 +14,7 @@ on:
 
 jobs:
   deploy:
-    uses: YOUR_USER/fast-infra/.github/workflows/deploy-template.yml@main
+    uses: gurkanucar/fast-infra/.github/workflows/deploy-template.yml@main
     with:
       app_name: go-hello
       tag: ${{ inputs.tag || '' }}

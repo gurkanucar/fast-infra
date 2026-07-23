@@ -1,4 +1,4 @@
-# App-side workflow (~10 lines). Replace YOUR_USER/fast-infra with your fork.
+# App-side workflow (~10 lines). Replace gurkanucar/fast-infra with your fork.
 # Takes effect when this app lives in its own repository.
 name: deploy
 
@@ -13,7 +13,7 @@ on:
 
 jobs:
   deploy:
-    uses: YOUR_USER/fast-infra/.github/workflows/deploy-template.yml@main
+    uses: gurkanucar/fast-infra/.github/workflows/deploy-template.yml@main
     with:
       app_name: static-hello
       tag: ${{ inputs.tag || '' }}

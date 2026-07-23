@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")" || exit 1
 
 # GitHub repo the release binaries are published from (override for a fork).
-REPO="${FAST_INFRA_REPO:-YOUR_USER/fast-infra}"
+REPO="${FAST_INFRA_REPO:-gurkanucar/fast-infra}"
 
 command -v docker >/dev/null || { echo "docker not found. Install Docker first: https://docs.docker.com/engine/install/"; exit 1; }
 docker compose version >/dev/null 2>&1 || { echo "docker compose plugin not found."; exit 1; }

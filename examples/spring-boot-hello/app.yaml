@@ -1,6 +1,6 @@
 # Copy into apps/spring-hello/app.yaml on the VPS (or run `platform new spring-hello`).
 name: spring-hello
-image: ghcr.io/YOUR_USER/spring-boot-hello
+image: ghcr.io/gurkanucar/spring-boot-hello
 domain: spring.example.com
 port: 8080
 health: /actuator/health
