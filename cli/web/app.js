@@ -129,15 +129,27 @@ async function ghStartConnect() {
   if (!r.ok) { st.innerHTML = `<p class="error">${esc((r.data && r.data.error) || "Failed")}</p>`; return; }
   const { userCode, verificationUri, interval } = r.data;
   st.innerHTML = `<div class="device"><p>1. Open <a href="${esc(verificationUri)}" target="_blank" rel="noopener">${esc(verificationUri)} ↗</a></p>
-    <p>2. Enter this code:</p><div class="device-code">${esc(userCode)}</div>
+    <p>2. Enter this code:</p>
+    <div class="device-code-row"><div class="device-code">${esc(userCode)}</div><button class="copy" id="gh-copy">copy</button></div>
     <p class="muted"><span class="spinner"></span> Waiting for you to authorize…</p></div>`;
+  $("#gh-copy").onclick = () => copyText(userCode);
   ghPolling = true;
-  ghPoll(Math.max(2, interval || 5) * 1000);
+  const ms = Math.max(5, interval || 5) * 1000;
+  setTimeout(() => ghPoll(ms), ms); // wait one interval before the first poll
 }
 async function ghPoll(ms) {
   if (!ghPolling) return;
   const r = await api("POST", "/api/github/poll");
-  if (r.data && r.data.status === "connected") { ghPolling = false; toast("GitHub connected"); ghRenderRepos(); return; }
+  const d = r.data || {};
+  if (d.status === "connected") { ghPolling = false; toast("GitHub connected"); ghRenderRepos(); return; }
+  if (d.detail === "access_denied" || d.detail === "expired_token") {
+    ghPolling = false;
+    const msg = d.detail === "access_denied" ? "Authorization was denied." : "The code expired.";
+    $("#gh-status").innerHTML = `<p class="error">${msg}</p><button class="primary" id="gh-retry">Try again</button>`;
+    $("#gh-retry").onclick = ghStartConnect;
+    return;
+  }
+  if (d.detail === "slow_down") ms += 5000; // GitHub asked us to poll slower
   setTimeout(() => ghPoll(ms), ms);
 }
 async function ghRenderRepos(user) {
