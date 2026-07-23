@@ -1,0 +1,20 @@
+# App-side workflow (~10 lines). Replace YOUR_USER/fast-infra with your fork.
+# Takes effect when this app lives in its own repository.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Commit SHA to deploy (empty = this commit)"
+        required: false
+
+jobs:
+  deploy:
+    uses: YOUR_USER/fast-infra/.github/workflows/deploy-template.yml@main
+    with:
+      app_name: spring-hello
+      tag: ${{ inputs.tag || '' }}
+    secrets: inherit

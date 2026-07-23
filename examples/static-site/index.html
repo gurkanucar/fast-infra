@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>static-site — fast-infra</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem; }
+    code { background: #f0f0f0; padding: 0 .25rem; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>hello from static-site</h1>
+  <p>A plain HTML page served by <code>nginx:alpine</code>, deployed with fast-infra.</p>
+  <p>This app has no <code>/health</code> endpoint — its <code>app.yaml</code> sets
+     <code>health: /</code>, so the platform health-checks the homepage itself.</p>
+</body>
+</html>

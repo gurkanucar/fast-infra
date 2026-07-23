@@ -68,6 +68,14 @@ Your app must, for zero-downtime deploys:
 
 See `examples/go-hello` for a complete reference app. If you set `manual: true`, your compose file must still define a `healthcheck` — the rolling deploy waits on Docker's health status and will otherwise time out.
 
+## Examples
+
+Three reference apps, each with a Dockerfile, `app.yaml`, and a ~10-line caller workflow:
+
+- [`examples/go-hello`](examples/go-hello) — the canonical Go app: a `/health` endpoint, graceful SIGTERM handling, tiny image. Start here.
+- [`examples/spring-boot-hello`](examples/spring-boot-hello) — Spring Boot with an actuator health check at `/actuator/health`; the Dockerfile caps the heap (`-Xmx256m`) and maps the platform's `PORT` to `--server.port`.
+- [`examples/static-site`](examples/static-site) — a plain HTML page on `nginx:alpine`, health-checked at `/` (the "no `/health` endpoint" case).
+
 ## How zero-downtime works
 
 `platform deploy blog abc123` renders the compose file, pulls `image:abc123`, starts new replicas *alongside* the old ones, waits for their health checks to pass, then gracefully stops the old containers (SIGTERM, 30s drain). Traefik discovers replicas through Docker, so traffic shifts automatically and no request is dropped. If the new containers never become healthy, they are removed and the old ones keep serving — a failed deploy changes nothing.

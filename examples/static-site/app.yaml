@@ -1,0 +1,7 @@
+# Copy into apps/static-hello/app.yaml on the VPS (or run `platform new static-hello`).
+name: static-hello
+image: ghcr.io/YOUR_USER/static-site
+domain: static.example.com
+port: 80
+health: /
+replicas: 1
