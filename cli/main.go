@@ -19,6 +19,7 @@ Usage:
   platform status [name]              overview, or deployment history for one app
   platform env <name> list            show .env keys; set/unset to edit them
   platform remove <name>              stop the app and delete apps/<name> (--keep-files to keep)
+  platform serve [addr]               start the web panel (needs PANEL_PASSWORD; default :8080)
 
 Run from the fast-infra repo root (the directory containing apps/).`
 
@@ -43,6 +44,8 @@ func main() {
 		err = cmdEnv(os.Args[2:])
 	case "remove":
 		err = cmdRemove(os.Args[2:])
+	case "serve":
+		err = cmdServe(os.Args[2:])
 	case "help", "-h", "--help":
 		fmt.Println(usage)
 	default:

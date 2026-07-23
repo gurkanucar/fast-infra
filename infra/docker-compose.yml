@@ -132,6 +132,27 @@ services:
       - traefik.http.services.rmq.loadbalancer.server.port=15672
     networks: [platform]
 
+  # Optional web panel (off by default). Start with:
+  #   docker compose -f infra/docker-compose.yml --profile panel up -d --build panel
+  # Root-equivalent (mounts the Docker socket); protected by PANEL_PASSWORD.
+  panel:
+    build:
+      context: ..
+      dockerfile: infra/panel.Dockerfile
+    restart: unless-stopped
+    profiles: [panel]
+    environment:
+      PANEL_PASSWORD: ${PANEL_PASSWORD}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ..:/repo
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.panel.rule=Host(`panel.${BASE_DOMAIN}`)
+      - traefik.http.routers.panel.tls.certresolver=le
+      - traefik.http.services.panel.loadbalancer.server.port=8080
+    networks: [platform]
+
 networks:
   platform:
     name: platform

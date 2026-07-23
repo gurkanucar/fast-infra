@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>fast-infra panel</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Login -->
+  <section id="login" class="login hidden">
+    <form id="login-form" class="card login-card">
+      <h1>fast-infra</h1>
+      <p class="muted">Sign in to manage your apps.</p>
+      <input id="password" type="password" placeholder="Panel password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </section>
+
+  <!-- App -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div class="brand">fast-infra <span class="muted">panel</span></div>
+      <div class="actions">
+        <button id="new-btn" class="primary">+ New app</button>
+        <button id="refresh-btn" class="ghost">Refresh</button>
+        <button id="logout-btn" class="ghost">Sign out</button>
+      </div>
+    </header>
+    <main>
+      <div id="apps" class="grid"></div>
+      <p id="empty" class="muted empty hidden">No apps yet. Click <b>New app</b> to create one.</p>
+    </main>
+  </div>
+
+  <!-- Detail modal -->
+  <div id="detail-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="close" data-close>&times;</button>
+      <div id="detail-body"></div>
+    </div>
+  </div>
+
+  <!-- New app modal -->
+  <div id="new-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="close" data-close>&times;</button>
+      <h2>New app</h2>
+      <form id="new-form" class="form">
+        <label>Name <input name="name" pattern="[a-z0-9][a-z0-9-]*" required placeholder="blog"></label>
+        <label>Image <input name="image" required placeholder="ghcr.io/you/blog"></label>
+        <label>Domain <input name="domain" required placeholder="blog.example.com"></label>
+        <div class="row">
+          <label>Port <input name="port" type="number" value="8080"></label>
+          <label>Health path <input name="health" value="/health"></label>
+        </div>
+        <label class="check"><input type="checkbox" name="provisionDB"> Create a dedicated Postgres database + user</label>
+        <label class="check"><input type="checkbox" name="provisionRedis"> Create a Redis user scoped to &lt;name&gt;:*</label>
+        <button type="submit" class="primary">Create</button>
+        <p class="new-error error"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
