@@ -229,3 +229,13 @@ main { max-width: 1080px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
 /* Dozzle logs link on the detail header */
 .logs-link { font-family: var(--mono); font-size: .82rem; text-decoration: none; color: var(--muted); font-weight: 600; margin-left: .8rem; }
 .logs-link:hover { color: var(--accent); }
+
+/* Service icon + name row */
+.svc-open { gap: .5rem; width: 100%; }
+.svc-icon { width: 18px; height: 18px; flex: none; color: var(--accent); }
+.svc-name { flex: 1; min-width: 0; }
+
+/* Offline service (e.g. RabbitMQ when its profile isn't started) */
+.svc-card.offline { opacity: .62; }
+.svc-card.offline .svc-open, .svc-card.offline .svc-icon { color: var(--muted); }
+.off-tag { font-size: .62rem; font-weight: 600; color: var(--faint); border: 1px solid var(--border-2); border-radius: 999px; padding: .05rem .42rem; text-transform: uppercase; letter-spacing: .6px; }

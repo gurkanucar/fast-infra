@@ -60,20 +60,35 @@ async function loadServices() {
   baseDomain = (r.data && r.data.baseDomain) || baseDomain;
   const box = $("#services");
   box.innerHTML = "";
-  const svcs = ((r.data && r.data.services) || []).filter((s) => s.running);
-  if (!svcs.length) { box.innerHTML = '<p class="muted">No service UIs detected.</p>'; return; }
+  const svcs = (r.data && r.data.services) || [];
+  if (!svcs.length) { box.innerHTML = '<p class="muted">No services.</p>'; return; }
   svcs.forEach((s) => box.appendChild(svcCard(s)));
 }
 function credRow(label, val, mask) {
   return `<div class="cred"><span class="ck">${label}</span><code>${mask ? "••••••••" : esc(val)}</code><button class="copy" data-val="${esc(val)}" title="Copy ${label}">copy</button></div>`;
 }
+// Inline line icons (no external assets) keyed by service, representing what
+// each one does rather than its brand mark.
+function svcIcon(name) {
+  const p = {
+    Adminer: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+    OpenObserve: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    Dozzle: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+    RabbitMQ: '<path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M2 12h6l2 3h4l2-3h6"/>',
+  }[name] || '<circle cx="12" cy="12" r="9"/>';
+  return `<svg class="svc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+}
 function svcCard(s) {
   const el = document.createElement("div");
-  el.className = "svc-card";
+  el.className = "svc-card" + (s.running ? "" : " offline");
   const creds = (s.user || s.pass)
     ? `<div class="creds">${s.user ? credRow("user", s.user) : ""}${s.pass ? credRow("pass", s.pass, true) : ""}</div>`
     : "";
-  el.innerHTML = `<a class="svc-open" href="${esc(s.url)}" target="_blank" rel="noopener" title="${esc(s.desc)}">${esc(s.name)} <span class="ext">↗</span></a>${creds}`;
+  const icon = svcIcon(s.name);
+  const head = s.running
+    ? `<a class="svc-open" href="${esc(s.url)}" target="_blank" rel="noopener" title="${esc(s.desc)}">${icon}<span class="svc-name">${esc(s.name)}</span><span class="ext">↗</span></a>`
+    : `<span class="svc-open" title="${esc(s.desc)} — not running">${icon}<span class="svc-name">${esc(s.name)}</span><span class="off-tag">offline</span></span>`;
+  el.innerHTML = head + creds;
   el.querySelectorAll(".copy").forEach((b) => (b.onclick = () => copyText(b.dataset.val)));
   return el;
 }
