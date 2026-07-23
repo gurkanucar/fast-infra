@@ -142,12 +142,13 @@ func handleGithubDisconnect(w http.ResponseWriter, r *http.Request) {
 }
 
 type ghRepo struct {
-	Name     string `json:"name"`
-	FullName string `json:"full_name"`
-	Private  bool   `json:"private"`
-	Archived bool   `json:"archived"`
-	Language string `json:"language"`
-	Owner    struct {
+	Name          string `json:"name"`
+	FullName      string `json:"full_name"`
+	Private       bool   `json:"private"`
+	Archived      bool   `json:"archived"`
+	Language      string `json:"language"`
+	DefaultBranch string `json:"default_branch"`
+	Owner         struct {
 		Login string `json:"login"`
 	} `json:"owner"`
 }
@@ -164,18 +165,19 @@ func handleGithubRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type item struct {
-		Name     string `json:"name"`
-		FullName string `json:"fullName"`
-		Owner    string `json:"owner"`
-		Language string `json:"language"`
-		Private  bool   `json:"private"`
+		Name          string `json:"name"`
+		FullName      string `json:"fullName"`
+		Owner         string `json:"owner"`
+		Language      string `json:"language"`
+		DefaultBranch string `json:"defaultBranch"`
+		Private       bool   `json:"private"`
 	}
 	out := []item{}
 	for _, rp := range repos {
 		if rp.Archived {
 			continue
 		}
-		out = append(out, item{rp.Name, rp.FullName, rp.Owner.Login, rp.Language, rp.Private})
+		out = append(out, item{rp.Name, rp.FullName, rp.Owner.Login, rp.Language, rp.DefaultBranch, rp.Private})
 	}
 	writeJSON(w, 200, out)
 }

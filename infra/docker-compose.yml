@@ -145,9 +145,14 @@ services:
       PANEL_PASSWORD: ${PANEL_PASSWORD}
       BASE_DOMAIN: ${BASE_DOMAIN}
       PANEL_GITHUB_TOKEN: ${PANEL_GITHUB_TOKEN:-}
+      # Where the GitHub Action SSHes to deploy. Defaults to BASE_DOMAIN / root.
+      PANEL_VPS_HOST: ${PANEL_VPS_HOST:-}
+      PANEL_VPS_USER: ${PANEL_VPS_USER:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/repo
+      # Lets the panel install the deploy key's public half for GitHub Actions.
+      - /root/.ssh:/root/.ssh
       # Share the host's registry login (docker login ghcr.io) so the panel can
       # pull private images. Empty if you never logged in — public pulls still work.
       - ${HOME}/.docker:/root/.docker:ro
