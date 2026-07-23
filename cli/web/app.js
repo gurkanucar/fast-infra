@@ -316,7 +316,7 @@ async function openDetail(name) {
         </div>
         <div class="card sect danger-card">
           <h4>Danger zone</h4>
-          <label class="check small"><input type="checkbox" id="keep-files"> Keep files (only stop containers)</label>
+          <p class="muted small" style="margin:.2rem 0 .7rem">Deletes apps/${esc(app.name)} and stops its containers. To only stop it (keeping files), use Stop above.</p>
           <button class="danger" id="do-remove">Remove app</button>
         </div>
       </div>
@@ -330,7 +330,7 @@ async function openDetail(name) {
   $("#cfg-save").onclick = () => saveConfig(name);
   $("#prov-db").onclick = () => provision(name, { db: true }, "#prov-db");
   $("#prov-redis").onclick = () => provision(name, { redis: true }, "#prov-redis");
-  $("#do-remove").onclick = () => removeApp(name, $("#keep-files").checked);
+  $("#do-remove").onclick = () => removeApp(name);
   $("#env-add").onclick = () => addEnvRow("", "");
   $("#env-save").onclick = () => saveEnv(name);
   loadEnv(name);
@@ -424,14 +424,11 @@ async function saveEnv(name) {
   else { toast((r.data && r.data.error) || "Env save failed", true); }
 }
 
-async function removeApp(name, keepFiles) {
-  const msg = keepFiles
-    ? `Stop ${name}'s containers? Files are kept so you can redeploy later.`
-    : `Remove ${name}? Containers stop and apps/${name} is deleted.\nThe Postgres database and pushed images are left intact.`;
-  if (!confirm(msg)) return;
-  const r = await api("DELETE", `/api/apps/${encodeURIComponent(name)}?keepFiles=${keepFiles}`);
-  if (r.ok) { toast(keepFiles ? `${name} stopped` : `${name} removed`); toDashboard(); }
-  else { toast("Remove failed", true); }
+async function removeApp(name) {
+  if (!confirm(`Remove ${name}? Its containers stop and apps/${name} is deleted.\nThe Postgres database and pushed images are left intact.`)) return;
+  const r = await api("DELETE", `/api/apps/${encodeURIComponent(name)}?keepFiles=false`);
+  if (r.ok) { toast(`${name} removed`); toDashboard(); }
+  else { toast((r.data && r.data.error) || "Remove failed", true); }
 }
 
 /* ---- create ---- */
