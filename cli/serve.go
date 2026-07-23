@@ -463,9 +463,18 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 		Tag string `json:"tag"`
 	}
 	json.NewDecoder(r.Body).Decode(&body)
-	tag := body.Tag
+	tag := strings.TrimSpace(body.Tag)
 	if tag == "" {
+		// Empty means "the latest build" — resolve the newest GHCR tag so it
+		// works for repos that only push SHA tags (no :latest). Fall back to latest.
 		tag = "latest"
+		if dir, err := appDir(name); err == nil {
+			if app, err := loadApp(dir); err == nil {
+				if t, ok := ghLatestImageTag(app.Image); ok {
+					tag = t
+				}
+			}
+		}
 	}
 	streamRun(w, "deploy", name, tag)
 }

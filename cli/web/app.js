@@ -278,7 +278,7 @@ async function openDetail(name) {
       <div class="col">
         <div class="card sect">
           <h4>Deploy</h4>
-          <div class="inline"><input id="deploy-tag" placeholder="tag (default latest)"><button class="primary" id="do-deploy">Deploy</button><button id="do-rollback">Rollback</button></div>
+          <div class="inline"><input id="deploy-tag" placeholder="tag — empty = latest build"><button class="primary" id="do-deploy">Deploy</button><button id="do-rollback">Rollback</button></div>
           <div class="inline" style="margin-top:.55rem"><button id="do-start">Start</button><button id="do-stop">Stop</button><span class="muted small">start = redeploy current tag · stop = down (keeps files)</span></div>
           <pre id="op-log" class="op-log hidden"></pre>
         </div>

@@ -15,7 +15,7 @@ import (
 // Device flow needs no client secret and no callback URL, so one id is shared
 // by every install — each operator authorizes it against their own account.
 const ghClientID = "Ov23liBosefcIioXQ1qi"
-const ghScope = "repo workflow"
+const ghScope = "repo workflow read:packages"
 
 var ghClient = &http.Client{Timeout: 20 * time.Second}
 
@@ -139,6 +139,41 @@ func handleGithubDisconnect(w http.ResponseWriter, r *http.Request) {
 	os.Remove(ghTokenPath())
 	ghDeviceCode = ""
 	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// ghLatestImageTag returns the newest tag pushed to the app's GHCR package, so
+// "Deploy" can grab the latest build even when the repo only pushes SHA tags
+// (no :latest). Prefers a concrete tag over "latest" for clean history.
+func ghLatestImageTag(image string) (string, bool) {
+	if ghToken() == "" || !strings.HasPrefix(image, "ghcr.io/") {
+		return "", false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(image, "ghcr.io/"), "/", 2)
+	if len(parts) != 2 {
+		return "", false
+	}
+	var versions []struct {
+		Metadata struct {
+			Container struct {
+				Tags []string `json:"tags"`
+			} `json:"container"`
+		} `json:"metadata"`
+	}
+	if err := ghGet(fmt.Sprintf("/users/%s/packages/container/%s/versions?per_page=30", parts[0], url.PathEscape(parts[1])), &versions); err != nil {
+		return "", false
+	}
+	for _, v := range versions { // newest first
+		tags := v.Metadata.Container.Tags
+		for _, t := range tags {
+			if t != "latest" {
+				return t, true
+			}
+		}
+		if len(tags) > 0 {
+			return tags[0], true
+		}
+	}
+	return "", false
 }
 
 type ghRepo struct {
