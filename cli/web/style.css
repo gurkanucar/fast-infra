@@ -111,6 +111,38 @@ main { max-width: 1100px; margin: 0 auto; padding: 1.6rem 1.4rem; }
 .env-row input { flex: 1; }
 .env-row .k { flex: 0 0 38%; }
 
+/* Blocks / sections on dashboard */
+.block { margin-bottom: 2rem; }
+.block-title { font-size: .82rem; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 .8rem; }
+.small { font-size: .82rem; }
+
+/* Service shortcuts */
+.svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .8rem; }
+.svc-card { display: block; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .9rem 1rem; box-shadow: var(--shadow); transition: transform .1s, box-shadow .1s; }
+.svc-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(16,24,40,.12); }
+.svc-card h3 { margin: 0 0 .15rem; font-size: 1rem; }
+.svc-card .ext { color: var(--accent); font-size: .85rem; }
+.svc-card p { margin: 0; font-size: .82rem; }
+
+/* Detail page */
+.topbar .brand .back { color: #cdd6e0; margin-right: .3rem; }
+.topbar .brand .back:hover { color: #fff; }
+.detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem; }
+.detail-head .sub { color: var(--muted); font-size: .92rem; margin-bottom: .3rem; word-break: break-all; }
+.dom-link { color: var(--accent-d); text-decoration: none; font-weight: 600; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 1.2rem; }
+.sect { padding: 1.1rem 1.2rem; }
+.sect h4 { margin: 0 0 .7rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.data-row { display: flex; align-items: center; gap: .6rem; padding: .35rem 0; }
+.data-row button { margin-left: auto; }
+.danger-card { border-color: #f2d6d6; }
+.danger-card .check { margin-bottom: .7rem; }
+.provision-box { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: .8rem; display: flex; flex-direction: column; gap: .5rem; }
+.provision-box code { background: #e7ebef; padding: 0 .25rem; border-radius: 3px; font-size: .85em; }
+
+@media (max-width: 720px) { .detail-grid { grid-template-columns: 1fr; } }
+
 /* Toast */
 .toast { position: fixed; bottom: 1.4rem; left: 50%; transform: translateX(-50%); background: var(--bg); color: #fff; padding: .7rem 1.1rem; border-radius: 8px; box-shadow: var(--shadow); z-index: 20; max-width: 90vw; }
 .toast.err { background: var(--danger); }

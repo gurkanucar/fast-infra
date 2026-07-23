@@ -143,6 +143,7 @@ services:
     profiles: [panel]
     environment:
       PANEL_PASSWORD: ${PANEL_PASSWORD}
+      BASE_DOMAIN: ${BASE_DOMAIN}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/repo

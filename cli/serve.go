@@ -64,6 +64,8 @@ func cmdServe(args []string) error {
 	mux.HandleFunc("POST /api/apps/{name}/scale", requireAuth(handleScale))
 	mux.HandleFunc("GET /api/apps/{name}/env", requireAuth(handleEnvGet))
 	mux.HandleFunc("PUT /api/apps/{name}/env", requireAuth(handleEnvPut))
+	mux.HandleFunc("POST /api/apps/{name}/provision", requireAuth(handleProvision))
+	mux.HandleFunc("GET /api/services", requireAuth(handleServices))
 
 	fmt.Println("panel listening on", addr)
 	return http.ListenAndServe(addr, mux)
@@ -190,7 +192,78 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	dir := filepath.Join("apps", name)
 	hist, _ := readHistory(dir)
-	writeJSON(w, 200, map[string]any{"app": info, "history": hist})
+	writeJSON(w, 200, map[string]any{"app": info, "history": hist, "db": pgHasDB(name), "redis": redisHasUser(name)})
+}
+
+// pgHasDB reports whether a Postgres database named after the app exists.
+func pgHasDB(name string) bool {
+	out, err := dockerOut("exec", pgContainer, "psql", "-U", "postgres", "-tAc",
+		"SELECT 1 FROM pg_database WHERE datname='"+name+"'")
+	return err == nil && strings.TrimSpace(out) == "1"
+}
+
+// redisHasUser reports whether a scoped Redis ACL user for the app exists.
+func redisHasUser(name string) bool {
+	out, err := dockerOut("exec", redisContainer, "redis-cli", "ACL", "GETUSER", name)
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
+func handleProvision(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	dir, err := appDir(name)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if _, err := os.Stat(dir); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": name + " does not exist"})
+		return
+	}
+	var body struct {
+		DB    bool `json:"db"`
+		Redis bool `json:"redis"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+	warnings := []string{}
+	if body.DB {
+		if pw, err := provisionPostgres(name); err != nil {
+			warnings = append(warnings, "Postgres: "+err.Error())
+		} else if err := envSet(dir, name, []string{"DATABASE_URL=postgres://" + name + ":" + pw + "@postgres:5432/" + name}); err != nil {
+			warnings = append(warnings, "env update: "+err.Error())
+		}
+	}
+	if body.Redis {
+		if pw, err := provisionRedis(name); err != nil {
+			warnings = append(warnings, "Redis: "+err.Error())
+		} else if err := envSet(dir, name, []string{"REDIS_URL=redis://" + name + ":" + pw + "@redis:6379"}); err != nil {
+			warnings = append(warnings, "env update: "+err.Error())
+		}
+	}
+	writeJSON(w, 200, map[string]any{"warnings": warnings})
+}
+
+type serviceLink struct {
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	Desc    string `json:"desc"`
+	Running bool   `json:"running"`
+}
+
+func handleServices(w http.ResponseWriter, r *http.Request) {
+	base := os.Getenv("BASE_DOMAIN")
+	list := []serviceLink{
+		{"Adminer", "https://db." + base, "Postgres database UI", containerUp("fast-infra-adminer-1")},
+		{"OpenObserve", "https://logs." + base, "Logs, traces & metrics", containerUp("fast-infra-openobserve-1")},
+		{"Dozzle", "https://tail." + base, "Live container logs", containerUp("fast-infra-dozzle-1")},
+		{"RabbitMQ", "https://mq." + base, "Message broker (optional)", containerUp("fast-infra-rabbitmq-1")},
+	}
+	writeJSON(w, 200, map[string]any{"baseDomain": base, "services": list})
+}
+
+// containerUp reports whether a container of the given name is running.
+func containerUp(name string) bool {
+	out, err := dockerOut("ps", "--filter", "name="+name, "--filter", "status=running", "--format", "{{.Names}}")
+	return err == nil && strings.TrimSpace(out) != ""
 }
 
 func handleCreate(w http.ResponseWriter, r *http.Request) {
