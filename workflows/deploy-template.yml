@@ -62,6 +62,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
             cd ~/fast-infra
             platform deploy ${{ inputs.app_name }} ${{ inputs.tag != '' && inputs.tag || github.sha }}
             docker image prune -f
