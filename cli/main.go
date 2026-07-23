@@ -17,6 +17,7 @@ Usage:
   platform rollback <name>            redeploy the previous successful tag
   platform scale <name> <replicas>    scale running replicas (persisted to app.yaml)
   platform status [name]              overview, or deployment history for one app
+  platform env <name> list            show .env keys; set/unset to edit them
 
 Run from the fast-infra repo root (the directory containing apps/).`
 
@@ -37,6 +38,8 @@ func main() {
 		err = cmdScale(os.Args[2:])
 	case "status":
 		err = cmdStatus(os.Args[2:])
+	case "env":
+		err = cmdEnv(os.Args[2:])
 	case "help", "-h", "--help":
 		fmt.Println(usage)
 	default:

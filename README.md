@@ -81,6 +81,15 @@ platform rollback blog     # redeploy the previous successful tag
 platform scale blog 3      # Traefik load-balances across replicas automatically
 ```
 
+Manage an app's environment (the `.env` file) without a text editor:
+
+```bash
+platform env blog list                       # show current keys and values
+platform env blog set STRIPE_KEY=sk_live_... # add or update one or more keys
+platform env blog unset STRIPE_KEY           # remove keys
+platform deploy blog                          # apply — .env is read when containers start
+```
+
 Rollbacks work because CI pushes every image twice: as `latest` and as the commit SHA. Keep SHA tags in your registry.
 
 ## CI/CD
@@ -117,7 +126,7 @@ Fewer decisions beat more features. One proxy, one database, one cache, one obse
 
 ## Roadmap
 
-- v2: `platform env set`, richer history, sequential rolling for multi-replica apps
+- v2: `platform env` (done), richer history, sequential rolling for multi-replica apps
 - v3 (only if people actually use this): REST API + web UI on top of the same Go internals
 
 ## License
