@@ -48,6 +48,7 @@ $("#logout-btn").onclick = logout;
 $("#detail-logout").onclick = logout;
 $("#refresh-btn").onclick = () => { loadServices(); loadApps(); };
 $("#new-btn").onclick = () => openModal("#new-modal");
+$("#gh-btn").onclick = openGithub;
 $("#back-btn").onclick = toDashboard;
 $$("[data-close]").forEach((b) => (b.onclick = closeModals));
 $$(".modal").forEach((m) => m.addEventListener("click", (e) => { if (e.target === m) closeModals(); }));
@@ -103,6 +104,71 @@ function toggleTheme() {
   const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
   document.documentElement.setAttribute("data-theme", next);
   localStorage.setItem("theme", next);
+}
+
+/* ---- GitHub (device-flow login + repo list) ---- */
+let ghPolling = false;
+async function openGithub() {
+  openModal("#github-modal");
+  const body = $("#gh-body");
+  body.innerHTML = '<div class="loading"><span class="spinner"></span> Checking…</div>';
+  const r = await api("GET", "/api/github/status");
+  if (r.data && r.data.connected) ghRenderRepos(r.data.user);
+  else ghRenderConnect();
+}
+function ghRenderConnect() {
+  ghPolling = false;
+  $("#gh-body").innerHTML = `<p class="muted">Connect your GitHub account to deploy a repo — no token, no YAML.</p>
+    <button class="primary" id="gh-connect">Connect GitHub</button><div id="gh-status"></div>`;
+  $("#gh-connect").onclick = ghStartConnect;
+}
+async function ghStartConnect() {
+  const st = $("#gh-status");
+  st.innerHTML = '<div class="loading"><span class="spinner"></span> Requesting a code…</div>';
+  const r = await api("POST", "/api/github/connect");
+  if (!r.ok) { st.innerHTML = `<p class="error">${esc((r.data && r.data.error) || "Failed")}</p>`; return; }
+  const { userCode, verificationUri, interval } = r.data;
+  st.innerHTML = `<div class="device"><p>1. Open <a href="${esc(verificationUri)}" target="_blank" rel="noopener">${esc(verificationUri)} ↗</a></p>
+    <p>2. Enter this code:</p><div class="device-code">${esc(userCode)}</div>
+    <p class="muted"><span class="spinner"></span> Waiting for you to authorize…</p></div>`;
+  ghPolling = true;
+  ghPoll(Math.max(2, interval || 5) * 1000);
+}
+async function ghPoll(ms) {
+  if (!ghPolling) return;
+  const r = await api("POST", "/api/github/poll");
+  if (r.data && r.data.status === "connected") { ghPolling = false; toast("GitHub connected"); ghRenderRepos(); return; }
+  setTimeout(() => ghPoll(ms), ms);
+}
+async function ghRenderRepos(user) {
+  ghPolling = false;
+  const body = $("#gh-body");
+  body.innerHTML = '<div class="loading"><span class="spinner"></span> Loading repos…</div>';
+  const r = await api("GET", "/api/github/repos");
+  if (!r.ok) { body.innerHTML = `<p class="error">${esc((r.data && r.data.error) || "Failed to load repos")}</p>`; return; }
+  const repos = r.data || [];
+  body.innerHTML = `<div class="gh-head"><span class="muted small">${user ? "Connected as " + esc(user) + " · " : ""}pick a repo</span><button class="ghost small" id="gh-disconnect">Disconnect</button></div><div class="repo-list"></div>`;
+  $("#gh-disconnect").onclick = async () => { await api("POST", "/api/github/disconnect"); ghRenderConnect(); };
+  const list = $(".repo-list");
+  if (!repos.length) { list.innerHTML = '<p class="muted small">No repositories.</p>'; return; }
+  repos.forEach((rp) => {
+    const el = document.createElement("div");
+    el.className = "repo-item";
+    el.innerHTML = `<div class="ri-info"><b>${esc(rp.name)}</b> ${rp.private ? '<span class="off-tag">private</span>' : ""}<div class="muted small">${esc(rp.fullName)}${rp.language ? " · " + esc(rp.language) : ""}</div></div><button class="primary small">Deploy</button>`;
+    el.querySelector("button").onclick = () => ghDeployRepo(rp);
+    list.appendChild(el);
+  });
+}
+function ghDeployRepo(rp) {
+  closeModals();
+  const f = $("#new-form");
+  f.elements.name.value = rp.name;
+  f.elements.image.value = `ghcr.io/${rp.owner}/${rp.name}`;
+  f.elements.domain.value = baseDomain ? `${rp.name}.${baseDomain}` : `${rp.name}.example.com`;
+  f.elements.port.value = 8080;
+  f.elements.health.value = "/health";
+  openModal("#new-modal");
+  toast(`Prefilled from ${rp.name} — review and create`);
 }
 
 /* ---- app list ---- */

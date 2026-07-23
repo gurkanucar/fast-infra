@@ -46,7 +46,7 @@ apps/                       per-app dirs on the VPS (gitignored): app.yaml, .env
 - v2 (**done**): `platform env` list/set/unset (cli/env.go); sequential rolling for multi-replica apps (cli/deploy.go); richer status — version age + deploy counts (cli/status.go).
 - v2.1 (release readiness): CI + stdlib unit tests, prebuilt release binaries so the VPS needs no Go, `platform remove` (cli/remove.go), Spring Boot + static-site examples, publish prep. Never touches data — `remove` leaves the Postgres DB and pushed images intact.
 - Optional provisioning: `platform new` opt-in Postgres role + scoped Redis ACL user (cli/provision.go; redis `--aclfile`). Create-only. Design doc: docs/design/2026-07-23-platform-new-provisioning.md.
-- v3: **web panel — done** (`platform serve`, cli/serve.go + cli/web/), built early at the owner's request; stdlib net/http + embedded SPA + HMAC session auth, reuses the CLI internals, opt-in `panel` compose service. Still open for v3: app.yaml schema growth, streaming deploy logs.
+- v3: **web panel — done** (`platform serve`, cli/serve.go + cli/web/), built early at the owner's request; stdlib net/http + embedded SPA + HMAC session auth, reuses the CLI internals, opt-in `panel` compose service. Does every op incl. live-streamed deploy logs, per-app provisioning, service shortcuts. **Deploy-from-GitHub (in progress):** GitHub device-flow login (`Connect GitHub`, shared public client id, no per-install setup) + repo listing (cli/github.go); Go bumped to 1.25 for the upcoming `golang.org/x/crypto` needed to auto-set repo secrets in the next slice (relaxes stdlib-only — owner-approved). Still open: app.yaml schema growth.
 
 Do not build v3 features during v1/v2. When in doubt, ship less.
 

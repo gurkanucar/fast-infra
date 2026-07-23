@@ -144,6 +144,7 @@ services:
     environment:
       PANEL_PASSWORD: ${PANEL_PASSWORD}
       BASE_DOMAIN: ${BASE_DOMAIN}
+      PANEL_GITHUB_TOKEN: ${PANEL_GITHUB_TOKEN:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/repo
