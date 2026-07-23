@@ -1,0 +1,133 @@
+name: fast-infra
+
+services:
+  traefik:
+    image: traefik:v3.1
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=platform
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - le_data:/letsencrypt
+    networks: [platform]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks: [platform]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      retries: 5
+
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: postgres
+      POSTGRES_EXTRA_OPTS: "--all"
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "2"
+      BACKUP_KEEP_MONTHS: "1"
+    volumes:
+      - ./backups:/backups
+    networks: [platform]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks: [platform]
+
+  adminer:
+    image: adminer:4
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.adminer.rule=Host(`db.${BASE_DOMAIN}`)
+      - traefik.http.routers.adminer.tls.certresolver=le
+      - traefik.http.services.adminer.loadbalancer.server.port=8080
+    networks: [platform]
+
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:latest
+    restart: unless-stopped
+    environment:
+      ZO_ROOT_USER_EMAIL: ${ACME_EMAIL}
+      ZO_ROOT_USER_PASSWORD: ${OO_PASSWORD}
+      ZO_COMPACT_DATA_RETENTION_DAYS: "14"
+      ZO_MEMORY_CACHE_MAX_SIZE: "256"
+    volumes:
+      - oo_data:/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.oo.rule=Host(`logs.${BASE_DOMAIN}`)
+      - traefik.http.routers.oo.tls.certresolver=le
+      - traefik.http.services.oo.loadbalancer.server.port=5080
+    networks: [platform]
+
+  dozzle:
+    image: amir20/dozzle:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dozzle.rule=Host(`tail.${BASE_DOMAIN}`)
+      - traefik.http.routers.dozzle.tls.certresolver=le
+      - traefik.http.routers.dozzle.middlewares=dozzle-auth
+      - traefik.http.middlewares.dozzle-auth.basicauth.users=${DOZZLE_AUTH}
+      - traefik.http.services.dozzle.loadbalancer.server.port=8080
+    networks: [platform]
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    profiles: [rabbitmq]
+    environment:
+      RABBITMQ_DEFAULT_USER: platform
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
+    volumes:
+      - rmq_data:/var/lib/rabbitmq
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.rmq.rule=Host(`mq.${BASE_DOMAIN}`)
+      - traefik.http.routers.rmq.tls.certresolver=le
+      - traefik.http.services.rmq.loadbalancer.server.port=15672
+    networks: [platform]
+
+networks:
+  platform:
+    name: platform
+
+volumes:
+  pg_data:
+  oo_data:
+  le_data:
+  rmq_data:
