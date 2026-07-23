@@ -42,7 +42,7 @@ apps/                       per-app dirs on the VPS (gitignored): app.yaml, .env
 ## Roadmap discipline
 
 - v1 (current): everything above.
-- v2 (in progress): `platform env` list/set/unset — **done** (cli/env.go); sequential rolling for multi-replica apps — **done** (cli/deploy.go); still to do: richer status/history.
+- v2 (**done**): `platform env` list/set/unset (cli/env.go); sequential rolling for multi-replica apps (cli/deploy.go); richer status — version age + deploy counts (cli/status.go).
 - v3 (only with real users): REST API + web UI reusing the same Go internals; app.yaml schema growth.
 
 Do not build v3 features during v1/v2. When in doubt, ship less.
