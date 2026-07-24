@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -174,6 +175,121 @@ func ghLatestImageTag(image string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// commitCache memoises commit messages (they're immutable) so reopening an
+// app's history doesn't refetch them from GitHub every time.
+var (
+	commitCache   = map[string]string{}
+	commitCacheMu sync.Mutex
+)
+
+// ghCommitMessage returns a commit's full message, cached per owner/repo/sha.
+func ghCommitMessage(owner, repo, sha string) string {
+	key := owner + "/" + repo + "@" + sha
+	commitCacheMu.Lock()
+	if m, ok := commitCache[key]; ok {
+		commitCacheMu.Unlock()
+		return m
+	}
+	commitCacheMu.Unlock()
+	var c struct {
+		Commit struct {
+			Message string `json:"message"`
+		} `json:"commit"`
+	}
+	if err := ghGet(fmt.Sprintf("/repos/%s/%s/commits/%s", owner, repo, sha), &c); err != nil {
+		return ""
+	}
+	commitCacheMu.Lock()
+	commitCache[key] = c.Commit.Message
+	commitCacheMu.Unlock()
+	return c.Commit.Message
+}
+
+func looksLikeSHA(s string) bool {
+	if len(s) < 7 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
+// handleAppCommits maps the SHA tags in an app's deploy history to their commit
+// messages, so the panel can show what each deployed version actually was.
+func handleAppCommits(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	dir, err := appDir(name)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	app, err := loadApp(dir)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	owner, repo, ok := imageOwnerRepo(app.Image)
+	if !ok || ghToken() == "" {
+		writeJSON(w, 200, map[string]string{})
+		return
+	}
+	hist, _ := readHistory(dir)
+	seen := map[string]bool{}
+	shas := []string{}
+	for _, d := range hist {
+		if d.Tag == "latest" || seen[d.Tag] || !looksLikeSHA(d.Tag) {
+			continue
+		}
+		seen[d.Tag] = true
+		shas = append(shas, d.Tag)
+	}
+	out := map[string]string{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 6)
+	for _, sha := range shas {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(sha string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if m := ghCommitMessage(owner, repo, sha); m != "" {
+				mu.Lock()
+				out[sha] = m
+				mu.Unlock()
+			}
+		}(sha)
+	}
+	wg.Wait()
+	writeJSON(w, 200, out)
+}
+
+// handleGithubBranches lists a repo's branches so the panel can offer them as
+// type-ahead suggestions (still free-text, so a SHA or any ref also works).
+func handleGithubBranches(w http.ResponseWriter, r *http.Request) {
+	owner := r.URL.Query().Get("owner")
+	repo := r.URL.Query().Get("repo")
+	if owner == "" || repo == "" || ghToken() == "" {
+		writeJSON(w, 200, []string{})
+		return
+	}
+	var branches []struct {
+		Name string `json:"name"`
+	}
+	if err := ghGet(fmt.Sprintf("/repos/%s/%s/branches?per_page=100", url.PathEscape(owner), url.PathEscape(repo)), &branches); err != nil {
+		writeJSON(w, 200, []string{})
+		return
+	}
+	out := make([]string, 0, len(branches))
+	for _, b := range branches {
+		out = append(out, b.Name)
+	}
+	writeJSON(w, 200, out)
 }
 
 type ghRepo struct {

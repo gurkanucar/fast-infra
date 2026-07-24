@@ -187,6 +187,10 @@ main { max-width: 1080px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
 .hist li { display: flex; gap: .6rem; align-items: center; padding: .34rem 0; border-bottom: 1px solid var(--border); }
 .hist li:last-child { border-bottom: none; }
 .hist b { font-family: var(--mono); font-weight: 600; } .hist .ok { color: var(--up); } .hist .fail { color: var(--danger); }
+.hist .h-sha { font-family: var(--mono); font-weight: 600; flex: none; }
+.hist .h-msg { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist .h-time { flex: none; font-size: .78rem; white-space: nowrap; }
+.hist .h-deploy { flex: none; }
 .env-row { display: flex; gap: .5rem; margin-bottom: .45rem; }
 .env-row input { flex: 1; font-family: var(--mono); font-size: .84rem; }
 .env-row .k { flex: 0 0 40%; }
