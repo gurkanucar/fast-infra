@@ -119,7 +119,7 @@ Rollbacks work because CI pushes every image twice: as `latest` and as the commi
 
 ## CI/CD
 
-Fork this repo and copy `workflows/deploy-template.yml` to `.github/workflows/deploy-template.yml` in your fork. On the VPS, create a deploy SSH key; in each app repo add secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`. Then each app repo needs only the ~10-line caller workflow (see `examples/go-hello/.github/workflows/deploy.yml`): push to `main` → build → push to GHCR → `platform deploy <app> <sha>` over SSH. The `workflow_dispatch` input lets you deploy any historical commit SHA from the Actions tab.
+Fork this repo and copy `workflows/deploy-template.yml` to `.github/workflows/deploy-template.yml` in your fork. On the VPS, create a deploy SSH key; in each app repo add secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`. Then each app repo needs only the ~10-line caller workflow (see `examples/go-hello/.github/workflows/deploy.yml`): push to `main` → build → push to GHCR → `platform deploy <app> <sha>` over SSH. The `workflow_dispatch` input lets you deploy any historical commit SHA from the Actions tab. The caller grants `packages: write` explicitly — pushing to GHCR needs it, a called workflow's token can't exceed the caller's, and repos default to read-only, so a caller without it fails at startup.
 
 **GHCR is private by default, so the VPS must be able to pull it.** `platform deploy` runs `docker compose pull`, which fails with `denied`/`unauthorized` on a private package. Either make the package public (repo → Packages → package → *Package settings* → *Change visibility* → Public), or log the VPS in once with a personal access token that has `read:packages`:
 
