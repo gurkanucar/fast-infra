@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/crypto/ssh"
@@ -153,30 +154,41 @@ func putRepoFile(owner, repo, path, content, message, branch string) (bool, erro
 
 // callerWorkflow references the operator's own fast-infra fork
 // (<owner>/fast-infra) so it works for any install, not just the maintainer's.
-func callerWorkflow(owner, app, branch string) string {
-	return fmt.Sprintf(`name: deploy-%[2]s
-on:
-  push:
-    branches: [%[3]s]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Commit SHA to deploy (empty = this commit)"
-        required: false
-# The reusable workflow pushes to GHCR, so the caller must grant packages:write.
-# A called workflow's token can't exceed the caller's, and repos default to
-# read-only — without this the run fails at startup.
-permissions:
+// autoDeploy toggles the push trigger (off = deploy only via workflow_dispatch),
+// and paths optionally restricts the push trigger to matching files (monorepos).
+func callerWorkflow(owner, app, branch string, autoDeploy bool, paths []string) string {
+	var on strings.Builder
+	on.WriteString("on:\n")
+	if autoDeploy {
+		on.WriteString("  push:\n")
+		fmt.Fprintf(&on, "    branches: [%s]\n", branch)
+		if len(paths) > 0 {
+			on.WriteString("    paths:\n")
+			for _, p := range paths {
+				fmt.Fprintf(&on, "      - %q\n", p)
+			}
+		}
+	}
+	on.WriteString("  workflow_dispatch:\n")
+	on.WriteString("    inputs:\n")
+	on.WriteString("      tag:\n")
+	on.WriteString("        description: \"Commit SHA to deploy (empty = this commit)\"\n")
+	on.WriteString("        required: false\n")
+	// The reusable workflow pushes to GHCR, so the caller must grant
+	// packages:write. A called workflow's token can't exceed the caller's, and
+	// repos default to read-only — without this the run fails at startup.
+	return fmt.Sprintf(`name: deploy-%[1]s
+%[2]spermissions:
   contents: read
   packages: write
 jobs:
   deploy:
-    uses: %[1]s/fast-infra/.github/workflows/deploy-template.yml@master
+    uses: %[3]s/fast-infra/.github/workflows/deploy-template.yml@master
     with:
-      app_name: %[2]s
+      app_name: %[1]s
       tag: ${{ inputs.tag || '' }}
     secrets: inherit
-`, owner, app, branch)
+`, app, on.String(), owner)
 }
 
 // ghDispatchWorkflow kicks off the deploy workflow explicitly. Only needed when
@@ -200,6 +212,19 @@ func ghDispatchWorkflow(owner, repo, workflowFile, branch string) error {
 		return fmt.Errorf("%s: %s", res.Status, strings.TrimSpace(string(b)))
 	}
 	return nil
+}
+
+// ghDispatchWorkflowRetry dispatches, retrying the 404 that GitHub returns for a
+// few seconds after a workflow file is first committed but not yet registered.
+func ghDispatchWorkflowRetry(owner, repo, workflowFile, branch string) error {
+	var err error
+	for range 6 {
+		if err = ghDispatchWorkflow(owner, repo, workflowFile, branch); err == nil {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return err
 }
 
 // ghAllowReusable lets the operator's other repos use the fast-infra fork's
@@ -230,15 +255,17 @@ func handleGithubDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Owner          string `json:"owner"`
-		Repo           string `json:"repo"`
-		Name           string `json:"name"`
-		Domain         string `json:"domain"`
-		Health         string `json:"health"`
-		Branch         string `json:"branch"`
-		Port           int    `json:"port"`
-		ProvisionDB    bool   `json:"provisionDB"`
-		ProvisionRedis bool   `json:"provisionRedis"`
+		Owner          string   `json:"owner"`
+		Repo           string   `json:"repo"`
+		Name           string   `json:"name"`
+		Domain         string   `json:"domain"`
+		Health         string   `json:"health"`
+		Branch         string   `json:"branch"`
+		Paths          []string `json:"paths"`
+		Port           int      `json:"port"`
+		AutoDeploy     *bool    `json:"autoDeploy"`
+		ProvisionDB    bool     `json:"provisionDB"`
+		ProvisionRedis bool     `json:"provisionRedis"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, err)
@@ -247,6 +274,8 @@ func handleGithubDeploy(w http.ResponseWriter, r *http.Request) {
 	if body.Branch == "" {
 		body.Branch = "main"
 	}
+	// Auto-deploy (deploy on every push) defaults to on when unspecified.
+	auto := body.AutoDeploy == nil || *body.AutoDeploy
 	// App name defaults to the repo, but can differ — so the same repo can run
 	// as several apps, each with its own per-app workflow file.
 	name := body.Name
@@ -286,20 +315,22 @@ func handleGithubDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	wfFile := "deploy-" + name + ".yml"
 	dispatched := false
-	committed, err := putRepoFile(body.Owner, body.Repo, ".github/workflows/"+wfFile, callerWorkflow(body.Owner, name, body.Branch), "Add fast-infra deploy workflow for "+name, body.Branch)
+	committed, err := putRepoFile(body.Owner, body.Repo, ".github/workflows/"+wfFile, callerWorkflow(body.Owner, name, body.Branch, auto, body.Paths), "Add fast-infra deploy workflow for "+name, body.Branch)
+	// Committing the workflow is itself a push, which triggers the build — but
+	// only when auto-deploy is on and there's no path filter (the committed file
+	// lives under .github/, so a path filter wouldn't match it). In every other
+	// case (path filter set, auto-deploy off, or an unchanged re-run) that push
+	// won't build, so we dispatch explicitly instead. Relying on the push when it
+	// applies avoids a second concurrent build of the same app.
+	pushBuilds := auto && len(body.Paths) == 0
 	switch {
 	case err != nil:
 		warnings = append(warnings, "workflow: "+err.Error())
-	case committed:
-		// Committing the workflow is itself a push to the branch, which triggers
-		// the build. Dispatching on top would double-build and run two concurrent
-		// deploys of the same app, so we don't.
+	case committed && pushBuilds:
 		dispatched = true
 	default:
-		// The workflow already existed unchanged (a re-run): no push happened, so
-		// trigger the build explicitly. It's already registered, so no 404 race.
-		if err := ghDispatchWorkflow(body.Owner, body.Repo, wfFile, body.Branch); err != nil {
-			warnings = append(warnings, "couldn't start a build (push to "+body.Branch+" to build): "+err.Error())
+		if err := ghDispatchWorkflowRetry(body.Owner, body.Repo, wfFile, body.Branch); err != nil {
+			warnings = append(warnings, "couldn't start a build (run the deploy workflow from the repo's Actions tab): "+err.Error())
 		} else {
 			dispatched = true
 		}

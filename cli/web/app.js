@@ -188,14 +188,18 @@ function ghDeployRepo(rp) {
       <label>App name<input name="name" value="${esc(rp.name)}" pattern="[a-z0-9][a-z0-9-]*" required></label>
       <label>Domain<input name="domain" value="${esc(dom)}" required></label>
       <div class="row"><label>Port<input name="port" type="number" value="8080"></label><label>Health path<input name="health" value="/health"></label></div>
-      <label>Branch to deploy on push<input name="branch" value="${esc(rp.defaultBranch || "main")}"></label>
+      <label>Branch<input name="branch" value="${esc(rp.defaultBranch || "main")}"></label>
+      <div class="provision-box">
+        <label class="check"><input type="checkbox" name="autoDeploy" checked> Auto-deploy on every push to the branch</label>
+        <label>Only when these paths change<input name="paths" placeholder="optional, e.g. src/**, Dockerfile"></label>
+      </div>
       <div class="provision-box">
         <label class="check"><input type="checkbox" name="provisionDB"> Create a Postgres database + user</label>
         <label class="check"><input type="checkbox" name="provisionRedis"> Create a scoped Redis user</label>
       </div>
       <button type="submit" class="primary">Set up &amp; enable deploys</button>
       <div class="gh-deploy-status"></div>
-      <p class="muted small">Writes the deploy workflow and secrets to the repo. The repo needs a Dockerfile. Pushing to the branch then builds and deploys.</p>
+      <p class="muted small">Writes the deploy workflow and secrets to the repo. The repo needs a Dockerfile. With auto-deploy on, pushing to the branch builds and deploys; turn it off to deploy only on demand. A first build starts either way.</p>
     </form>`;
   $("#gh-back").onclick = () => ghRenderRepos();
   $("#gh-deploy-form").addEventListener("submit", (e) => ghSubmitDeploy(e, rp));
@@ -211,6 +215,8 @@ async function ghSubmitDeploy(e, rp) {
     owner: rp.owner, repo: rp.name, name: g("name").value.trim() || rp.name,
     domain: g("domain").value.trim(), port: +g("port").value || 8080, health: g("health").value.trim() || "/health",
     branch: g("branch").value.trim() || rp.defaultBranch || "main",
+    autoDeploy: g("autoDeploy").checked,
+    paths: g("paths").value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean),
     provisionDB: g("provisionDB").checked, provisionRedis: g("provisionRedis").checked,
   };
   const r = await api("POST", "/api/github/deploy", body);
@@ -220,7 +226,8 @@ async function ghSubmitDeploy(e, rp) {
   const branch = (r.data && r.data.branch) || body.branch;
   const warns = (r.data && r.data.warnings) || [];
   if (warns.length) toast(warns.join("; "), true);
-  else toast(r.data && r.data.dispatched ? `${nm}: build started in Actions` : `${nm}: set up — push to ${branch}`);
+  else if (r.data && r.data.dispatched) toast(`${nm}: build started in Actions`);
+  else toast(body.autoDeploy ? `${nm}: set up — push to ${branch}` : `${nm}: set up — deploy on demand`);
   closeModals();
   openDetail(nm); // go to the app page instead of leaving the modal open
 }
