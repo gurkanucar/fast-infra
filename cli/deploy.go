@@ -174,19 +174,25 @@ var healthClient = &http.Client{Timeout: 3 * time.Second}
 // health path. The GET is made from here (host or panel) over the platform
 // network, so the app image needs no wget/curl of its own.
 func probeHealthy(id string, port int, health string) (ok, exited bool) {
-	st, err := dockerOut("inspect", "-f", "{{.State.Status}}", id)
+	// One inspect for both the status and the platform-network IP (two separate
+	// docker calls per replica add up when the panel lists many apps).
+	out, err := dockerOut("inspect", "-f", "{{.State.Status}} {{.NetworkSettings.Networks.platform.IPAddress}}", id)
 	if err != nil {
 		return false, true
 	}
-	switch strings.TrimSpace(st) {
+	fields := strings.Fields(strings.TrimSpace(out))
+	status := ""
+	if len(fields) > 0 {
+		status = fields[0]
+	}
+	switch status {
 	case "exited", "dead":
 		return false, true
 	case "running":
-		ip, err := dockerOut("inspect", "-f", "{{.NetworkSettings.Networks.platform.IPAddress}}", id)
-		if err != nil || strings.TrimSpace(ip) == "" {
-			return false, false
+		if len(fields) < 2 {
+			return false, false // running but not yet on the platform network
 		}
-		resp, err := healthClient.Get(fmt.Sprintf("http://%s:%d%s", strings.TrimSpace(ip), port, health))
+		resp, err := healthClient.Get(fmt.Sprintf("http://%s:%d%s", fields[1], port, health))
 		if err != nil {
 			return false, false
 		}
