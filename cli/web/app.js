@@ -189,14 +189,17 @@ function ghDeployRepo(rp) {
       <label>Domain<input name="domain" value="${esc(dom)}" required></label>
       <div class="row"><label>Port<input name="port" type="number" value="8080"></label><label>Health path<input name="health" value="/health"></label></div>
       <label>Branch<input name="branch" value="${esc(rp.defaultBranch || "main")}"></label>
-      <div class="provision-box">
-        <label class="check"><input type="checkbox" name="autoDeploy" checked> Auto-deploy on every push to the branch</label>
-        <label>Only when these paths change<input name="paths" placeholder="optional, e.g. src/**, Dockerfile"></label>
-      </div>
-      <div class="provision-box">
-        <label class="check"><input type="checkbox" name="provisionDB"> Create a Postgres database + user</label>
-        <label class="check"><input type="checkbox" name="provisionRedis"> Create a scoped Redis user</label>
-      </div>
+      <details class="adv">
+        <summary>Advanced</summary>
+        <div class="provision-box">
+          <label class="check"><input type="checkbox" name="autoDeploy" checked> Auto-deploy on every push to the branch</label>
+          <label>Only when these paths change<input name="paths" placeholder="optional, e.g. src/**, Dockerfile"></label>
+        </div>
+        <div class="provision-box">
+          <label class="check"><input type="checkbox" name="provisionDB"> Create a Postgres database + user</label>
+          <label class="check"><input type="checkbox" name="provisionRedis"> Create a scoped Redis user</label>
+        </div>
+      </details>
       <button type="submit" class="primary">Set up &amp; enable deploys</button>
       <div class="gh-deploy-status"></div>
       <p class="muted small">Writes the deploy workflow and secrets to the repo. The repo needs a Dockerfile. With auto-deploy on, pushing to the branch builds and deploys; turn it off to deploy only on demand. A first build starts either way.</p>
@@ -303,6 +306,10 @@ async function openDetail(name) {
           </div>
           <div class="inline" style="margin-top:.6rem"><button class="primary" id="cfg-save">Save settings</button><span class="muted small">deploy to apply</span></div>
         </div>
+        <div class="card sect" id="deploy-settings-card" hidden>
+          <h4>Deploy settings</h4>
+          <div id="ds-body"><span class="muted small">Loading…</span></div>
+        </div>
         <div class="card sect">
           <h4>Environment</h4>
           <div id="env-list"></div>
@@ -341,6 +348,41 @@ async function openDetail(name) {
   $("#env-add").onclick = () => addEnvRow("", "");
   $("#env-save").onclick = () => saveEnv(name);
   loadEnv(name);
+  loadDeploySettings(name, app);
+}
+
+// loadDeploySettings shows the GitHub deploy trigger controls, but only for apps
+// set up via "Deploy from GitHub" (their repo has a caller workflow to edit).
+async function loadDeploySettings(name, app) {
+  const card = $("#deploy-settings-card");
+  const r = await api("GET", `/api/apps/${encodeURIComponent(name)}/deploy-settings`);
+  if (!r.ok || !r.data || !r.data.available) { card.hidden = true; return; }
+  const d = r.data;
+  card.hidden = false;
+  $("#ds-body").innerHTML = `
+    <label class="fld">Branch<input id="ds-branch" value="${esc(d.branch || "")}"></label>
+    <label class="check" style="margin:.55rem 0"><input type="checkbox" id="ds-auto" ${d.autoDeploy ? "checked" : ""}> Auto-deploy on every push</label>
+    <label class="fld">Only when these paths change<input id="ds-paths" value="${esc((d.paths || []).join(", "))}" placeholder="optional, e.g. src/**, Dockerfile"></label>
+    <div class="inline" style="margin-top:.6rem"><button class="primary" id="ds-save">Save &amp; redeploy</button><span class="muted small">rewrites ${esc(d.owner)}/${esc(d.repo)}</span></div>`;
+  $("#ds-save").onclick = () => saveDeploySettings(name, app, d);
+}
+
+async function saveDeploySettings(name, app, d) {
+  const btn = $("#ds-save"), orig = btn.textContent;
+  btn.disabled = true; btn.textContent = "Saving…";
+  const body = {
+    owner: d.owner, repo: d.repo, name,
+    domain: app.domain, port: app.port, health: app.health,
+    branch: $("#ds-branch").value.trim() || d.branch,
+    autoDeploy: $("#ds-auto").checked,
+    paths: $("#ds-paths").value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean),
+  };
+  const r = await api("POST", "/api/github/deploy", body);
+  btn.disabled = false; btn.textContent = orig;
+  if (!r.ok) { toast((r.data && r.data.error) || "Failed to save", true); return; }
+  const warns = (r.data && r.data.warnings) || [];
+  if (warns.length) toast(warns.join("; "), true);
+  else toast(r.data && r.data.dispatched ? "Saved — build started in Actions" : "Saved");
 }
 
 async function act(name, action, body, btnSel, busy) {

@@ -247,6 +247,91 @@ func envOr(k, def string) string {
 	return def
 }
 
+// imageOwnerRepo splits a ghcr.io/<owner>/<repo> image into its owner and repo.
+func imageOwnerRepo(image string) (owner, repo string, ok bool) {
+	if !strings.HasPrefix(image, "ghcr.io/") {
+		return "", "", false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(image, "ghcr.io/"), "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+// parseCallerTriggers reads the trigger config back out of a generated caller
+// workflow's YAML (string scan — no YAML dependency, matching callerWorkflow's
+// exact shape). autoDeploy is true when a push trigger is present.
+func parseCallerTriggers(content string) (autoDeploy bool, branch string, paths []string) {
+	inPush, inPaths := false, false
+	for _, ln := range strings.Split(content, "\n") {
+		t := strings.TrimSpace(ln)
+		switch {
+		case t == "push:":
+			autoDeploy, inPush, inPaths = true, true, false
+		case strings.HasPrefix(t, "workflow_dispatch:"):
+			inPush, inPaths = false, false
+		case inPush && strings.HasPrefix(t, "branches:"):
+			branch = strings.TrimSpace(strings.Trim(strings.TrimSpace(strings.TrimPrefix(t, "branches:")), "[]"))
+			inPaths = false
+		case inPush && t == "paths:":
+			inPaths = true
+		case inPaths && strings.HasPrefix(t, "- "):
+			if p := strings.Trim(strings.TrimSpace(t[2:]), `"`); p != "" {
+				paths = append(paths, p)
+			}
+		}
+	}
+	return
+}
+
+// handleDeploySettings reports an app's GitHub deploy trigger config, read from
+// the caller workflow in its repo, so the app page can show and edit it.
+func handleDeploySettings(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	dir, err := appDir(name)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	app, err := loadApp(dir)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	owner, repo, ok := imageOwnerRepo(app.Image)
+	if !ok || ghToken() == "" {
+		writeJSON(w, 200, map[string]any{"available": false})
+		return
+	}
+	// The caller workflow lives on the branch it was committed to; the repo's
+	// default branch is the best guess without storing it locally.
+	var meta struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := ghGet("/repos/"+owner+"/"+repo, &meta); err != nil {
+		writeJSON(w, 200, map[string]any{"available": false})
+		return
+	}
+	var file struct {
+		Content string `json:"content"`
+	}
+	path := ".github/workflows/deploy-" + name + ".yml"
+	if err := ghGet(fmt.Sprintf("/repos/%s/%s/contents/%s?ref=%s", owner, repo, path, meta.DefaultBranch), &file); err != nil || file.Content == "" {
+		writeJSON(w, 200, map[string]any{"available": false})
+		return
+	}
+	raw, _ := base64.StdEncoding.DecodeString(strings.ReplaceAll(file.Content, "\n", ""))
+	auto, branch, paths := parseCallerTriggers(string(raw))
+	if branch == "" {
+		branch = meta.DefaultBranch
+	}
+	writeJSON(w, 200, map[string]any{
+		"available": true, "owner": owner, "repo": repo,
+		"branch": branch, "autoDeploy": auto, "paths": paths,
+	})
+}
+
 // handleGithubDeploy scaffolds a repo for hands-off deploys: create the app,
 // provision an SSH deploy key + repo secrets, and commit the caller workflow.
 func handleGithubDeploy(w http.ResponseWriter, r *http.Request) {
