@@ -271,12 +271,34 @@ func handleList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	apps := []appInfo{}
+	names := make([]string, 0, len(entries))
 	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+		if e.IsDir() {
+			names = append(names, e.Name())
 		}
-		if info, err := appInfoFor(e.Name()); err == nil {
+	}
+	// Each app's state shells out to docker (a `docker compose ps` plus per-replica
+	// inspects and an HTTP probe), so gather them concurrently instead of serially
+	// — otherwise the list time grows with the app count. Bounded so a large
+	// number of apps doesn't fork a swarm of docker processes at once.
+	infos := make([]*appInfo, len(names))
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, name string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if info, err := appInfoFor(name); err == nil {
+				infos[i] = info
+			}
+		}(i, name)
+	}
+	wg.Wait()
+	apps := []appInfo{}
+	for _, info := range infos {
+		if info != nil {
 			apps = append(apps, *info)
 		}
 	}
