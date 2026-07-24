@@ -155,6 +155,11 @@ main { max-width: 1080px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
 .form .row { display: flex; gap: .85rem; } .form .row label { flex: 1; }
 .provision-box { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: .9rem; display: flex; flex-direction: column; gap: .6rem; }
 .provision-box code { font-family: var(--mono); background: var(--surface-2); padding: 0 .3rem; border-radius: 4px; font-size: .85em; color: var(--accent); }
+.adv { border: 1px solid var(--border); border-radius: 8px; padding: 0 .9rem; }
+.adv[open] { padding-bottom: .9rem; }
+.adv > summary { cursor: pointer; padding: .7rem 0; color: var(--muted); font-size: .9rem; user-select: none; list-style-position: inside; }
+.adv > summary:hover { color: var(--text); }
+.adv .provision-box { margin-top: .3rem; }
 
 /* Detail page */
 .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.6rem; }

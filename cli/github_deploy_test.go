@@ -34,6 +34,24 @@ func TestCallerWorkflowNoAutoDeploy(t *testing.T) {
 	}
 }
 
+func TestParseCallerTriggersRoundTrip(t *testing.T) {
+	// Auto-deploy with a path filter round-trips through parseCallerTriggers.
+	wf := callerWorkflow("acme", "api", "release", true, []string{"api/**", "Dockerfile"})
+	auto, branch, paths := parseCallerTriggers(wf)
+	if !auto || branch != "release" {
+		t.Fatalf("auto=%v branch=%q, want true/release", auto, branch)
+	}
+	if len(paths) != 2 || paths[0] != "api/**" || paths[1] != "Dockerfile" {
+		t.Fatalf("paths=%v, want [api/** Dockerfile]", paths)
+	}
+
+	// Auto-deploy off means no push trigger, so no branch is parsed back.
+	auto, _, _ = parseCallerTriggers(callerWorkflow("acme", "api", "main", false, nil))
+	if auto {
+		t.Error("auto-deploy off must parse back as false")
+	}
+}
+
 func TestCallerWorkflowPaths(t *testing.T) {
 	wf := callerWorkflow("acme", "api", "release", true, []string{"api/**", "Dockerfile"})
 	for _, want := range []string{
