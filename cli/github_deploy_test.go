@@ -34,6 +34,19 @@ func TestCallerWorkflowNoAutoDeploy(t *testing.T) {
 	}
 }
 
+func TestLooksLikeSHA(t *testing.T) {
+	for _, s := range []string{"094dfa1fa7f3545440779f3081f763871a6982fd", "abc1234", "deadbeef"} {
+		if !looksLikeSHA(s) {
+			t.Errorf("%q should look like a SHA", s)
+		}
+	}
+	for _, s := range []string{"latest", "v1.0.0", "main", "abc", "release/1.0.0", "GHIJKL0"} {
+		if looksLikeSHA(s) {
+			t.Errorf("%q should not look like a SHA", s)
+		}
+	}
+}
+
 func TestParseCallerTriggersRoundTrip(t *testing.T) {
 	// Auto-deploy with a path filter round-trips through parseCallerTriggers.
 	wf := callerWorkflow("acme", "api", "release", true, []string{"api/**", "Dockerfile"})

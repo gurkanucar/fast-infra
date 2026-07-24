@@ -118,6 +118,8 @@ func cmdServe(args []string) error {
 	mux.HandleFunc("GET /api/github/repos", requireAuth(handleGithubRepos))
 	mux.HandleFunc("POST /api/github/deploy", requireAuth(handleGithubDeploy))
 	mux.HandleFunc("GET /api/apps/{name}/deploy-settings", requireAuth(handleDeploySettings))
+	mux.HandleFunc("GET /api/apps/{name}/commits", requireAuth(handleAppCommits))
+	mux.HandleFunc("GET /api/github/branches", requireAuth(handleGithubBranches))
 
 	fmt.Println("panel listening on", addr)
 	return http.ListenAndServe(addr, mux)

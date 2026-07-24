@@ -188,7 +188,8 @@ function ghDeployRepo(rp) {
       <label>App name<input name="name" value="${esc(rp.name)}" pattern="[a-z0-9][a-z0-9-]*" required></label>
       <label>Domain<input name="domain" value="${esc(dom)}" required></label>
       <div class="row"><label>Port<input name="port" type="number" value="8080"></label><label>Health path<input name="health" value="/health"></label></div>
-      <label>Branch<input name="branch" value="${esc(rp.defaultBranch || "main")}"></label>
+      <label>Branch<input name="branch" list="gh-branch-list" value="${esc(rp.defaultBranch || "main")}"></label>
+      <datalist id="gh-branch-list"></datalist>
       <details class="adv">
         <summary>Advanced</summary>
         <div class="provision-box">
@@ -206,6 +207,7 @@ function ghDeployRepo(rp) {
     </form>`;
   $("#gh-back").onclick = () => ghRenderRepos();
   $("#gh-deploy-form").addEventListener("submit", (e) => ghSubmitDeploy(e, rp));
+  loadBranches(rp.owner, rp.name, "gh-branch-list");
 }
 async function ghSubmitDeploy(e, rp) {
   e.preventDefault();
@@ -266,8 +268,15 @@ async function openDetail(name) {
   if (!r.ok) { $("#detail-body").innerHTML = '<p class="muted" style="padding:1rem 0">Couldn’t load this app.</p>'; return; }
   const { app, history, db, redis } = r.data;
   $("#detail-name").textContent = app.name;
+  const shortSha = (t) => (/^[0-9a-f]{7,}$/.test(t) ? t.slice(0, 10) : t);
   const hist = (history || []).slice().reverse().slice(0, 12)
-    .map((h) => `<li><span class="${h.status === "success" ? "ok" : "fail"}">${h.status === "success" ? "✓" : "✗"}</span><b>${esc(h.tag)}</b><span class="muted">${new Date(h.time).toLocaleString()}</span></li>`)
+    .map((h) => `<li data-sha="${esc(h.tag)}">
+        <span class="${h.status === "success" ? "ok" : "fail"}">${h.status === "success" ? "✓" : "✗"}</span>
+        <code class="h-sha" title="${esc(h.tag)}">${esc(shortSha(h.tag))}</code>
+        <span class="h-msg muted"></span>
+        <span class="muted h-time">${new Date(h.time).toLocaleString()}</span>
+        <button class="ghost small h-deploy">Deploy this</button>
+      </li>`)
     .join("") || '<li class="muted">no deployments yet</li>';
   const dbBadge = db ? '<span class="badge up">provisioned</span>' : '<span class="badge down">not set up</span>';
   const rdBadge = redis ? '<span class="badge up">scoped user</span>' : '<span class="badge down">not set up</span>';
@@ -349,10 +358,19 @@ async function openDetail(name) {
       </section>
     </div>`;
 
-  $("#detail-tabs").querySelectorAll(".tab").forEach((t) => {
-    t.onclick = () => {
-      $("#detail-tabs").querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === t));
-      $(".tab-body").querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.dataset.panel === t.dataset.tab));
+  const switchTab = (tab) => {
+    $("#detail-tabs").querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === tab));
+    $(".tab-body").querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.dataset.panel === tab));
+  };
+  $("#detail-tabs").querySelectorAll(".tab").forEach((t) => { t.onclick = () => switchTab(t.dataset.tab); });
+
+  // History: "Deploy this" reuses the Deploy card (fills the tag, switches tab,
+  // triggers the same streamed deploy).
+  $(".hist").querySelectorAll("li[data-sha] .h-deploy").forEach((btn) => {
+    btn.onclick = () => {
+      $("#deploy-tag").value = btn.closest("li").dataset.sha;
+      switchTab("deploy");
+      $("#do-deploy").click();
     };
   });
 
@@ -369,6 +387,21 @@ async function openDetail(name) {
   $("#env-save").onclick = () => saveEnv(name);
   loadEnv(name);
   loadDeploySettings(name, app);
+  loadCommitMessages(name);
+}
+
+// loadCommitMessages fills each history row with its commit's subject line (full
+// message in the tooltip). Best-effort: only GitHub-backed apps return anything.
+async function loadCommitMessages(name) {
+  const r = await api("GET", `/api/apps/${encodeURIComponent(name)}/commits`);
+  if (!r.ok || !r.data) return;
+  $(".hist").querySelectorAll("li[data-sha]").forEach((li) => {
+    const full = r.data[li.dataset.sha];
+    if (!full) return;
+    const span = li.querySelector(".h-msg");
+    span.textContent = full.split("\n")[0];
+    span.title = full;
+  });
 }
 
 // loadDeploySettings shows the GitHub deploy trigger controls, but only for apps
@@ -380,11 +413,22 @@ async function loadDeploySettings(name, app) {
   const d = r.data;
   card.hidden = false;
   $("#ds-body").innerHTML = `
-    <label class="fld">Branch<input id="ds-branch" value="${esc(d.branch || "")}"></label>
+    <label class="fld">Branch<input id="ds-branch" list="ds-branch-list" value="${esc(d.branch || "")}"></label>
+    <datalist id="ds-branch-list"></datalist>
     <label class="check" style="margin:.55rem 0"><input type="checkbox" id="ds-auto" ${d.autoDeploy ? "checked" : ""}> Auto-deploy on every push</label>
     <label class="fld">Only when these paths change<input id="ds-paths" value="${esc((d.paths || []).join(", "))}" placeholder="optional, e.g. src/**, Dockerfile"></label>
     <div class="inline" style="margin-top:.6rem"><button class="primary" id="ds-save">Save &amp; redeploy</button><span class="muted small">rewrites ${esc(d.owner)}/${esc(d.repo)}</span></div>`;
   $("#ds-save").onclick = () => saveDeploySettings(name, app, d);
+  loadBranches(d.owner, d.repo, "ds-branch-list");
+}
+
+// loadBranches fills a <datalist> with a repo's branches for type-ahead. The
+// input stays free-text, so a SHA or an unlisted ref still works.
+async function loadBranches(owner, repo, listId) {
+  const r = await api("GET", `/api/github/branches?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`);
+  const dl = document.getElementById(listId);
+  if (!dl || !r.ok || !Array.isArray(r.data)) return;
+  dl.innerHTML = r.data.map((b) => `<option value="${esc(b)}"></option>`).join("");
 }
 
 async function saveDeploySettings(name, app, d) {
