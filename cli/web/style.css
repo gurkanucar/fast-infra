@@ -169,6 +169,12 @@ main { max-width: 1080px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
 .stat b { display: block; font-family: var(--mono); font-size: 1.35rem; } .stat span { font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; align-items: start; }
 .col { display: flex; flex-direction: column; gap: 1.1rem; }
+.tabs { display: flex; gap: .15rem; border-bottom: 1px solid var(--border); margin-bottom: 1.3rem; flex-wrap: wrap; }
+.tab { background: none; border: none; border-bottom: 2px solid transparent; padding: .55rem .95rem; margin-bottom: -1px; color: var(--muted); font-size: .85rem; font-weight: 600; cursor: pointer; border-radius: 0; box-shadow: none; }
+.tab:hover { color: var(--text); background: none; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-panel { display: none; }
+.tab-panel.active { display: flex; flex-direction: column; gap: 1.1rem; max-width: 680px; }
 .sect { padding: 1.15rem 1.25rem; }
 .sect h4 { margin: 0 0 .8rem; font-family: var(--mono); font-size: .72rem; text-transform: uppercase; letter-spacing: 1.2px; color: var(--faint); }
 .inline { display: flex; gap: .5rem; align-items: center; }

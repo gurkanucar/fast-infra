@@ -284,8 +284,15 @@ async function openDetail(name) {
         <div class="stat"><b>${app.running}</b><span>running</span></div>
       </div>
     </div>
-    <div class="detail-grid">
-      <div class="col">
+    <div class="tabs" id="detail-tabs">
+      <button class="tab active" data-tab="deploy">Deploy</button>
+      <button class="tab" data-tab="settings">Settings</button>
+      <button class="tab" data-tab="env">Environment</button>
+      <button class="tab" data-tab="data">Data</button>
+      <button class="tab" data-tab="history">History</button>
+    </div>
+    <div class="tab-body">
+      <section class="tab-panel active" data-panel="deploy">
         <div class="card sect">
           <h4>Deploy</h4>
           <div class="inline"><input id="deploy-tag" placeholder="tag — empty = latest build"><button class="primary" id="do-deploy">Deploy</button><button id="do-rollback">Rollback</button></div>
@@ -296,6 +303,8 @@ async function openDetail(name) {
           <h4>Scale</h4>
           <div class="inline"><input id="scale-n" type="number" min="1" value="${app.replicas}" style="max-width:110px"><button id="do-scale">Scale</button></div>
         </div>
+      </section>
+      <section class="tab-panel" data-panel="settings">
         <div class="card sect">
           <h4>Settings</h4>
           <label class="fld">Image<input id="cfg-image" value="${esc(app.image)}"></label>
@@ -310,31 +319,42 @@ async function openDetail(name) {
           <h4>Deploy settings</h4>
           <div id="ds-body"><span class="muted small">Loading…</span></div>
         </div>
+        <div class="card sect danger-card">
+          <h4>Danger zone</h4>
+          <p class="muted small" style="margin:.2rem 0 .7rem">Deletes apps/${esc(app.name)} and stops its containers. To only stop it (keeping files), use Stop above.</p>
+          <button class="danger" id="do-remove">Remove app</button>
+        </div>
+      </section>
+      <section class="tab-panel" data-panel="env">
         <div class="card sect">
           <h4>Environment</h4>
           <div id="env-list"></div>
           <button id="env-add" class="ghost">+ Add variable</button>
           <div class="inline" style="margin-top:.6rem"><button class="primary" id="env-save">Save env</button><span class="muted small">applied on next deploy</span></div>
         </div>
-      </div>
-      <div class="col">
+      </section>
+      <section class="tab-panel" data-panel="data">
         <div class="card sect">
           <h4>Data</h4>
           <div class="data-row">Postgres ${dbBadge} <button class="ghost small" id="prov-db">${db ? "Reset" : "Create DB + user"}</button></div>
           <div class="data-row">Redis ${rdBadge} <button class="ghost small" id="prov-redis">${redis ? "Reset" : "Create scoped user"}</button></div>
           <p class="muted small">Credentials are written to the app's .env; apply with a deploy.</p>
         </div>
+      </section>
+      <section class="tab-panel" data-panel="history">
         <div class="card sect">
           <h4>History</h4>
           <ul class="hist">${hist}</ul>
         </div>
-        <div class="card sect danger-card">
-          <h4>Danger zone</h4>
-          <p class="muted small" style="margin:.2rem 0 .7rem">Deletes apps/${esc(app.name)} and stops its containers. To only stop it (keeping files), use Stop above.</p>
-          <button class="danger" id="do-remove">Remove app</button>
-        </div>
-      </div>
+      </section>
     </div>`;
+
+  $("#detail-tabs").querySelectorAll(".tab").forEach((t) => {
+    t.onclick = () => {
+      $("#detail-tabs").querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === t));
+      $(".tab-body").querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.dataset.panel === t.dataset.tab));
+    };
+  });
 
   $("#do-deploy").onclick = () => actStream(name, "deploy", { tag: $("#deploy-tag").value.trim() }, "#do-deploy", "Deploying…");
   $("#do-rollback").onclick = () => actStream(name, "rollback", {}, "#do-rollback", "Rolling back…");
