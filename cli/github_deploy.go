@@ -163,6 +163,12 @@ on:
       tag:
         description: "Commit SHA to deploy (empty = this commit)"
         required: false
+# The reusable workflow pushes to GHCR, so the caller must grant packages:write.
+# A called workflow's token can't exceed the caller's, and repos default to
+# read-only — without this the run fails at startup.
+permissions:
+  contents: read
+  packages: write
 jobs:
   deploy:
     uses: %[1]s/fast-infra/.github/workflows/deploy-template.yml@master
