@@ -118,11 +118,24 @@ func setRepoSecret(owner, repo, name, value string) error {
 
 // --- commit the caller workflow ---------------------------------------------
 
-func putRepoFile(owner, repo, path, content, message, branch string) error {
+// putRepoFile commits content at path (creating or updating it). It reports
+// whether it actually wrote a new commit: identical content is a no-op, and the
+// caller relies on that to decide whether a build will start from the push.
+func putRepoFile(owner, repo, path, content, message, branch string) (bool, error) {
 	var existing struct {
-		SHA string `json:"sha"`
+		SHA     string `json:"sha"`
+		Content string `json:"content"`
 	}
 	ghGet(fmt.Sprintf("/repos/%s/%s/contents/%s?ref=%s", owner, repo, path, branch), &existing)
+	if existing.SHA != "" {
+		// The Contents API returns base64 with embedded newlines; strip them
+		// before comparing. Identical content means no commit — so no push, and
+		// no build would be triggered.
+		cur, _ := base64.StdEncoding.DecodeString(strings.ReplaceAll(existing.Content, "\n", ""))
+		if string(cur) == content {
+			return false, nil
+		}
+	}
 	m := map[string]string{
 		"message": message,
 		"content": base64.StdEncoding.EncodeToString([]byte(content)),
@@ -132,7 +145,10 @@ func putRepoFile(owner, repo, path, content, message, branch string) error {
 		m["sha"] = existing.SHA
 	}
 	b, _ := json.Marshal(m)
-	return ghPut(fmt.Sprintf("/repos/%s/%s/contents/%s", owner, repo, path), b)
+	if err := ghPut(fmt.Sprintf("/repos/%s/%s/contents/%s", owner, repo, path), b); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // callerWorkflow references the operator's own fast-infra fork
@@ -157,8 +173,9 @@ jobs:
 `, owner, app, branch)
 }
 
-// ghDispatchWorkflow kicks off the deploy workflow so a build starts right
-// after setup, without the operator having to push.
+// ghDispatchWorkflow kicks off the deploy workflow explicitly. Only needed when
+// committing the caller workflow didn't produce a push (a re-run with identical
+// content) — a fresh or changed commit already triggers the build on its own.
 func ghDispatchWorkflow(owner, repo, workflowFile, branch string) error {
 	body := []byte(fmt.Sprintf(`{"ref":%q}`, branch))
 	req, err := http.NewRequest("POST", fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/workflows/%s/dispatches", owner, repo, workflowFile), bytes.NewReader(body))
@@ -263,12 +280,23 @@ func handleGithubDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	wfFile := "deploy-" + name + ".yml"
 	dispatched := false
-	if err := putRepoFile(body.Owner, body.Repo, ".github/workflows/"+wfFile, callerWorkflow(body.Owner, name, body.Branch), "Add fast-infra deploy workflow for "+name, body.Branch); err != nil {
+	committed, err := putRepoFile(body.Owner, body.Repo, ".github/workflows/"+wfFile, callerWorkflow(body.Owner, name, body.Branch), "Add fast-infra deploy workflow for "+name, body.Branch)
+	switch {
+	case err != nil:
 		warnings = append(warnings, "workflow: "+err.Error())
-	} else if err := ghDispatchWorkflow(body.Owner, body.Repo, wfFile, body.Branch); err != nil {
-		warnings = append(warnings, "couldn't auto-start the build (push to "+body.Branch+" to build): "+err.Error())
-	} else {
+	case committed:
+		// Committing the workflow is itself a push to the branch, which triggers
+		// the build. Dispatching on top would double-build and run two concurrent
+		// deploys of the same app, so we don't.
 		dispatched = true
+	default:
+		// The workflow already existed unchanged (a re-run): no push happened, so
+		// trigger the build explicitly. It's already registered, so no 404 race.
+		if err := ghDispatchWorkflow(body.Owner, body.Repo, wfFile, body.Branch); err != nil {
+			warnings = append(warnings, "couldn't start a build (push to "+body.Branch+" to build): "+err.Error())
+		} else {
+			dispatched = true
+		}
 	}
 	writeJSON(w, 200, map[string]any{"warnings": warnings, "branch": body.Branch, "name": name, "dispatched": dispatched})
 }
